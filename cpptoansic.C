@@ -108,9 +108,36 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
 
 
 void unparseClasstoStruct(SgClassDefinition* classDef) {
+  SgScopeStatement* outerMostScope = classDef->get_scope(); 
+  ROSE_ASSERT(outerMostScope != NULL);
   std::string className = classDef->class_name();
+  ROSE_ASSERT(!className.empty());
+  SgClassDeclaration* classtoStructDecl = NULL;
+  classtoStructDecl = buildStructDeclaration(className, outerMostScope);
+  ROSE_ASSERT(classtoStructDecl!= NULL);
+  
+
+  SgClassDefinition *structDef = classtoStructDecl->get_definition();
+  ROSE_ASSERT(structDef != NULL);
+  SgScopeStatement* structDefScope = isSgScopeStatement(structDef);
+  ROSE_ASSERT(structDefScope!= NULL);
 
 
+  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
+
+  SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
+  SgStatement* newStatement = NULL; 
+  for(; itr != decStatements.end(); ++itr) {
+    SgDeclarationStatement* newDec = *(itr);
+    SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
+    if(varDec != NULL) {
+      newStatement = copyStatement(varDec);
+      ROSE_ASSERT(newStatement != NULL);
+      appendStatement(newStatement, structDefScope);
+    }
+  }
+  
+  outFile<<classtoStructDecl->unparseToString()<<std::endl;  
 
   outFile<<"typedef struct "<<className<<" "<<className<<";"; 
 }
@@ -359,12 +386,12 @@ int main ( int argc, char** argv )
     SgSourceFile * sfile = isSgSourceFile(sageFile);
     ROSE_ASSERT(sfile);
     SgGlobal *root = sfile->get_globalScope();
-    SgDeclarationStatementPtrList& declList = root->get_declarations ();
+    SgDeclarationStatementPtrList& classDeclList = root->get_declarations ();
     bool hasOpenMP = false;
 
-    for (SgDeclarationStatementPtrList::iterator p = declList.begin(); 
-	 p != declList.end(); ++p) {
-      SgClassDeclaration* classDec = idSgClassDeclaration(*p);
+    for (SgDeclarationStatementPtrList::iterator p = classDeclList.begin(); 
+	 p != classDeclList.end(); ++p) {
+      SgClassDeclaration* classDec = isSgClassDeclaration(*p);
       if(classDec != NULL) {
 	SgClassDefinition* classDef = classDec->get_definition();
 	if(classDef != NULL) {
@@ -376,7 +403,7 @@ int main ( int argc, char** argv )
   }
   
   
-  SgFilePtrList & ptr_list = project->get_fileList();
+  //  SgFilePtrList & ptr_list = project->get_fileList();
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
     SgFile* sageFile = (*iter);
