@@ -110,8 +110,19 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
 void unparseClasstoStruct(SgClassDefinition* classDef) {
   SgScopeStatement* outerMostScope = classDef->get_scope(); 
   ROSE_ASSERT(outerMostScope != NULL);
-  std::string className = classDef->class_name();
+  SgTemplateInstantiationDefn* tempDefinition = isSgTemplateInstantiationDefn(classDef);
+  SgTemplateClassDefinition* templateDef = isSgTemplateClassDefinition(classDef);
+  
+  if(tempDefinition != NULL || templateDef != NULL)
+    return;
+  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
+  if(decStatements.size() == 0)
+    return;
+
+  std::string className = classDef->get_declaration()->get_name();
   ROSE_ASSERT(!className.empty());
+  std::cout<<"The class unparsed is "<<className<<std::endl;
+
   SgClassDeclaration* classtoStructDecl = NULL;
   classtoStructDecl = buildStructDeclaration(className, outerMostScope);
   ROSE_ASSERT(classtoStructDecl!= NULL);
@@ -123,12 +134,12 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   ROSE_ASSERT(structDefScope!= NULL);
 
 
-  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
-
+  
   SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
   SgStatement* newStatement = NULL; 
   for(; itr != decStatements.end(); ++itr) {
     SgDeclarationStatement* newDec = *(itr);
+    std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
     SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
     if(varDec != NULL) {
       newStatement = copyStatement(varDec);
@@ -137,7 +148,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
     }
   }
   
-  outFile<<classtoStructDecl->unparseToString()<<std::endl;  
+  outFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;  
 
   outFile<<"typedef struct "<<className<<" "<<className<<";"; 
 }
@@ -375,14 +386,24 @@ int main ( int argc, char** argv )
   
   
   outFile.open(filename.c_str());
-  outFile<<"/*** HELLO WORLD ***/\n#include<stdio.h>\n#include<stdlib.h>\n";
+  outFile<<"/*** HELLO WORLD ***/\n#include<stdio.h>\n#include<stdlib.h>\n #include <omp.h>\n";
   
   //** Collect all Class declarations and append.
 
   SgFilePtrList & ptr_list = project->get_fileList();
+  
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
     SgFile* sageFile = (*iter);
+    std::cout<<"The filename is "<<sageFile->getFileName ()<<std::endl;
+  }
+  
+  //  return 0;
+
+  for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
+       iter++){ 
+    SgFile* sageFile = (*iter);
+    std::cout<<"The filename is "<<sageFile->getFileName ()<<std::endl;
     SgSourceFile * sfile = isSgSourceFile(sageFile);
     ROSE_ASSERT(sfile);
     SgGlobal *root = sfile->get_globalScope();
@@ -524,6 +545,8 @@ void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, SgFunctionDe
   SgBasicBlock *newBody  = newFnDefinition->get_body();
   ROSE_ASSERT(newBody != NULL);
   
+
+
   unparseCPPScopetoCScope(fnBody, newBody);
   
 
