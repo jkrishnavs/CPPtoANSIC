@@ -18,13 +18,11 @@ using namespace SageInterface;
 
 SgName thisName = "this";
 
-// /**
-//    These a
-//  **/
-// struct ClassDetails{
-//   SgClassDeclarations
-
-// }
+/**
+   These are class declarations which has to be converted to 
+   structs.
+ **/
+std::vector<SgClassDeclaration*> classSymbolsUsed;
 
 struct FunctionClassDetails {
   SgFunctionDeclaration *dec;
@@ -109,6 +107,13 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
 }
 
 
+void unparseClasstoStruct(SgClassDefinition* classDef) {
+  std::string className = classDef->class_name();
+
+
+
+  outFile<<"typedef struct "<<className<<" "<<className<<";"; 
+}
 
 
 void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
@@ -154,11 +159,11 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       SgClassDeclaration* classDec = NULL;
       SgTreeCopy expCopyHelp;
       
-      std::cout<<"Call Expr "<<get_name(callExpr)<<std::endl;
+      //      std::cout<<"Call Expr "<<get_name(callExpr)<<std::endl;
       bool undefined = false;
       if(defDec != NULL) {
 	ROSE_ASSERT(fnSymbol != NULL);
-	std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
+	//std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
 	if(memFunction != NULL) {
 	  /**
 	     What we have is a class member function.
@@ -166,11 +171,15 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	     classname_function name
 	     prepent the class object to the function list.
 	  **/
-	  std::cout<<"Its a member function "<<get_name(callExpr->get_function())<<std::endl;
+	  // std::cout<<"Its a member function "<<get_name(callExpr->get_function())<<std::endl;
+
+
 	  SgDotExp* dotExpr = isSgDotExp(callExpr->get_function());
+	  SgArrowExp* arrowExpr = isSgArrowExp(callExpr->get_function());
 	  SgExpression* object = NULL;
 	  SgExpression* objectExpr = NULL;
 	  if(dotExpr != NULL) {
+	    
 	    object = dotExpr->get_lhs_operand();
 	    ROSE_ASSERT(object != NULL);
 	    ROSE_ASSERT(object != NULL);
@@ -182,12 +191,31 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	      objectExpr = 
 		isSgExpression(refExpr->copy(expCopyHelp));
 	    }
+	  } else if(arrowExpr != NULL) {
+	    	    
+	    object = arrowExpr->get_lhs_operand();
+	    ROSE_ASSERT(object != NULL);
+	    ROSE_ASSERT(object != NULL);
+	    SgVarRefExp* refExpr = isSgVarRefExp(object);
+	    if(refExpr == NULL){
+	      // this means standard library function calls
+	      undefined = true;
+	    } else {
+	      objectExpr = 
+		isSgExpression(refExpr->copy(expCopyHelp));
+	    }
+
 	  } else {
 	    // this pointer.
+	    std::cout<<"SgDot Expression is NULL "<<get_name(callExpr)<<std::endl;
+
 	    objectExpr = 
 	      buildVarRefExp (thisName, newScope);
 	    //buildStringVal(std::string value=""
 	  }
+
+
+	 
 	  if(undefined == false) {
 	  ROSE_ASSERT(objectExpr != NULL);
 	  SgMemberFunctionDeclaration* classFunctionDec = 
@@ -244,7 +272,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  if(found == NULL) {
 	    ROSE_ASSERT(fnDec != NULL);
 	    ROSE_ASSERT(newfnDec != NULL);
-	    std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
+	    //  std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
 	    found  = new  FunctionClassDetails(newfnDec, callExpr, classDec);
 	    ROSE_ASSERT(found != NULL);
 	    baseFunctionList.push_back(found);
@@ -310,6 +338,8 @@ int main ( int argc, char** argv )
   char* fnName = "main";
   SgProject* project = frontend(argc,argv);
 #endif
+
+  
   
   outermostScope =  SageInterface::getFirstGlobalScope(project);
   printf("// The Function name is %s \n", fnName);
@@ -318,9 +348,34 @@ int main ( int argc, char** argv )
   
   
   outFile.open(filename.c_str());
-  outFile<<"/*** HELLO WORLD ***/\n";
+  outFile<<"/*** HELLO WORLD ***/\n#include<stdio.h>\n#include<stdlib.h>\n";
+  
+  //** Collect all Class declarations and append.
 
+  SgFilePtrList & ptr_list = project->get_fileList();
+  for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
+       iter++){ 
+    SgFile* sageFile = (*iter);
+    SgSourceFile * sfile = isSgSourceFile(sageFile);
+    ROSE_ASSERT(sfile);
+    SgGlobal *root = sfile->get_globalScope();
+    SgDeclarationStatementPtrList& declList = root->get_declarations ();
+    bool hasOpenMP = false;
 
+    for (SgDeclarationStatementPtrList::iterator p = declList.begin(); 
+	 p != declList.end(); ++p) {
+      SgClassDeclaration* classDec = idSgClassDeclaration(*p);
+      if(classDec != NULL) {
+	SgClassDefinition* classDef = classDec->get_definition();
+	if(classDef != NULL) {
+	  unparseClasstoStruct(classDef);
+	}
+      }
+    }
+
+  }
+  
+  
   SgFilePtrList & ptr_list = project->get_fileList();
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
@@ -414,7 +469,7 @@ int main ( int argc, char** argv )
 
 
   outFile<<"\n\n int main() {\n" 
-	 <<"   gm_graph gm;\n"
+	 <<"   gm_graph gm;\n  "
          << fnName << argumentList <<";"
 	 <<" \n  return 0; \n\n }";
 #endif
@@ -444,6 +499,8 @@ void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, SgFunctionDe
   
   unparseCPPScopetoCScope(fnBody, newBody);
   
+
+  // Copy the function back to a file.
   outFile<<newFunctionDeclaration->unparseToCompleteString()<<std::endl;
   return;
 }
@@ -458,7 +515,7 @@ void getSuitableFunctionName(FunctionClassDetails* cur, SgName&  newName) {
   } else {
     newName = SgName(curFn->get_name());
   }
-  std::cout<<"The newly created function name is "<<newName<<std::endl;
+  //  std::cout<<"The newly created function name is "<<newName<<std::endl;
   return;
 }
 
