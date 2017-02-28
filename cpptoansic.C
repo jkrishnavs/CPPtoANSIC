@@ -18,11 +18,14 @@ using namespace SageInterface;
 
 SgName thisName = "this";
 
+
+
 /**
    These are class declarations which has to be converted to 
    structs.
  **/
 std::vector<SgClassDeclaration*> classSymbolsUsed;
+
 
 struct FunctionClassDetails {
   SgFunctionDeclaration *dec;
@@ -65,6 +68,7 @@ SgScopeStatement *outermostScope = NULL;
 SgFunctionDeclaration* baseFunctionDeclaration = NULL;
 std::vector<FunctionClassDetails*> baseFunctionList;
 std::ofstream outFile;
+std::ofstream decFile;
 
 SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList);
 void getSuitableFunctionName(FunctionClassDetails* cur, 
@@ -124,7 +128,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   std::cout<<"The class unparsed is "<<className<<std::endl;
 
   SgClassDeclaration* classtoStructDecl = NULL;
-  classtoStructDecl = buildStructDeclaration(className, outerMostScope);
+  classtoStructDecl = buildStructDeclaration(className, outermostScope);
   ROSE_ASSERT(classtoStructDecl!= NULL);
   
 
@@ -144,13 +148,13 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
     if(varDec != NULL) {
       newStatement = copyStatement(varDec);
       ROSE_ASSERT(newStatement != NULL);
-      appendStatement(newStatement, structDefScope);
+      //      appendStatement(newStatement, structDefScope);
     }
   }
   
-  outFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;  
+  decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;  
 
-  outFile<<"typedef struct "<<className<<" "<<className<<";"; 
+  decFile<<"typedef struct "<<className<<" "<<className<<";\n"; 
 }
 
 
@@ -383,14 +387,23 @@ int main ( int argc, char** argv )
   printf("// The Function name is %s \n", fnName);
   SgFunctionDeclaration * fndefinition;  
   std::string filename = fnName + std::string("_cconvert.c");
-  
-  
+  std::string tempfile = fnName + std::string("_definitions.c");
+
+  decFile.open(tempfile.c_str());
   outFile.open(filename.c_str());
   outFile<<"/*** HELLO WORLD ***/\n#include<stdio.h>\n#include<stdlib.h>\n #include <omp.h>\n";
+
+  // SgClassDeclaration* classtoStructDecl = NULL;
+  // classtoStructDecl = buildStructDeclaration("hello", outermostScope);
+  // ROSE_ASSERT(classtoStructDecl!= NULL);
+  
+  // outFile<<classtoStructDecl->unparseToString()<<std::endl;
   
   //** Collect all Class declarations and append.
 
+
   SgFilePtrList & ptr_list = project->get_fileList();
+
   
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
@@ -398,8 +411,8 @@ int main ( int argc, char** argv )
     std::cout<<"The filename is "<<sageFile->getFileName ()<<std::endl;
   }
   
-  //  return 0;
 
+  /*
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
     SgFile* sageFile = (*iter);
@@ -419,12 +432,10 @@ int main ( int argc, char** argv )
 	  unparseClasstoStruct(classDef);
 	}
       }
-    }
-
+    } 
   }
+  */
   
-  
-  //  SgFilePtrList & ptr_list = project->get_fileList();
   for (SgFilePtrList::iterator iter = ptr_list.begin(); iter!=ptr_list.end();
        iter++){ 
     SgFile* sageFile = (*iter);
@@ -455,8 +466,7 @@ int main ( int argc, char** argv )
 	fndefinition = func;
 	
 	FunctionClassDetails* baseDec = new FunctionClassDetails(func, 
-								 NULL, NULL);
-	
+								 NULL, NULL);	
 	SgFunctionDeclaration* newFnDeclaration = 
 	  copyFunctionDeclaration(baseDec);
 	
@@ -521,8 +531,18 @@ int main ( int argc, char** argv )
          << fnName << argumentList <<";"
 	 <<" \n  return 0; \n\n }";
 #endif
+  decFile.close();
+  
+  std::ifstream definitionFile;
+  definitionFile.open(tempfile.c_str());
+
+  for (std::string str; std::getline(definitionFile, str); ) {
+    outFile << str;
+  }
 
   outFile.close();
+  definitionFile.close();
+  
   ROSE_ASSERT(outermostScope != NULL);
   insertStatementBefore(getFirstStatement(outermostScope),
   			baseFunctionDeclaration);
@@ -551,7 +571,7 @@ void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, SgFunctionDe
   
 
   // Copy the function back to a file.
-  outFile<<newFunctionDeclaration->unparseToCompleteString()<<std::endl;
+  decFile<<newFunctionDeclaration->unparseToCompleteString()<<std::endl;
   return;
 }
 
@@ -615,14 +635,14 @@ SgFunctionDeclaration* copyFunctionDeclaration(FunctionClassDetails* cur) {
   ROSE_ASSERT(parentScope != NULL);
 
   
-  if(baseFunctionDeclaration == NULL) {
-    baseFunctionDeclaration = buildNondefiningFunctionDeclaration(functionName, 
-					   returnType, paramList, parentScope);
-  }
-
+  //  if(baseFunctionDeclaration == NULL) {
+  baseFunctionDeclaration = buildNondefiningFunctionDeclaration(functionName, 
+								returnType, paramList, parentScope);
+    //}
+  ROSE_ASSERT(baseFunctionDeclaration != NULL);
   // TODO if memFn != NULL prepent the struct to the copied list.
 
-  
+  outFile<<baseFunctionDeclaration->unparseToString()<<std::endl;
   
   SgFunctionDeclaration* functionDefinition = 
     buildDefiningFunctionDeclaration(functionName, returnType, paramList, 
