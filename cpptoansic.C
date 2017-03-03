@@ -27,10 +27,50 @@ std::string classesTobeSkipped[] =
    "__normal_iterator < pointer , vector< edge_dest_t , allocator< edge_dest_t > > > ",
   "__copy_move_backward < true , true , iterator_category > "};
 
+std::string functionsTobeSkipped[] = 
+  {
+    "operator!=",
+    "sort < int32_t * , _gm_sort_indices< node_t > > ",
+    "__introsort_loop < int32_t * , long , _gm_sort_indices< node_t > >",
+    "__final_insertion_sort < int32_t * , _gm_sort_indices< node_t > >",
+    "partial_sort < int32_t * , _gm_sort_indices< node_t > >",
+    "__unguarded_partition_pivot < int32_t * , _gm_sort_indices< node_t > >",
+    "__insertion_sort < int32_t * , _gm_sort_indices< node_t > >",
+    "__unguarded_insertion_sort < int32_t * , _gm_sort_indices< node_t > >",
+    "__heap_select < int32_t * , _gm_sort_indices< node_t > >",
+    "sort_heap < int32_t * , _gm_sort_indices< node_t > >",
+    "__move_median_to_first < int32_t * , _gm_sort_indices< node_t > >",
+    "__unguarded_partition < int32_t * , int32_t , _gm_sort_indices< node_t > >",
+    "move < value_type & >",
+    "move_backward < pointer , pointer >",
+    "__unguarded_linear_insert < int32_t * , _gm_sort_indices< node_t > >",
+    "make_heap < int32_t * , _gm_sort_indices< node_t > >",
+    "__pop_heap < int32_t * , _gm_sort_indices< node_t > >",
+    "iter_swap < int32_t * , int32_t * >",
+    "__copy_move_backward_a2 < true , iterator_type , pointer >",
+    "__miter_base < pointer >",
+    "__adjust_heap < int32_t * , difference_type , type , _gm_sort_indices< node_t > >",
+    "swap < int32_t >",
+    "__copy_move_backward_a < true , iterator_type , iterator_type >",
+    "__niter_base < pointer >",
+    "__push_heap < int32_t * , difference_type , type , _gm_sort_indices< node_t > >",
+    "log < int > "
+  };
+
 int sizeofClassesTobeSkipped = 8;
+int sizeofFunctionsTobeSkipped = 26;
+
+bool skipTheFunction(SgName funName) {
+  // std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
+  for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
+    if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
+      return true;
+  }
+  return false;
+}
 
 bool skipTheClass(SgName className) {
-  std::cout<<"The class to be skipped is "<<className.getString()<<std::endl;
+  //  std::cout<<"The class to be skipped is "<<className.getString()<<std::endl;
   for(int i=0; i < sizeofClassesTobeSkipped; i++) {
     if(classesTobeSkipped[i].compare(className.getString()) == 0)
       return true;
@@ -153,7 +193,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
 
   std::string className = classDef->get_declaration()->get_name();
   ROSE_ASSERT(!className.empty());
-  std::cout<<"The class unparsed is "<<className<<std::endl;
+  // std::cout<<"The class unparsed is "<<className<<std::endl;
 
   SgClassDeclaration* classtoStructDecl = NULL;
   classtoStructDecl = buildStructDeclaration(className, outermostScope);
@@ -171,7 +211,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   SgStatement* newStatement = NULL; 
   for(; itr != decStatements.end(); ++itr) {
     SgDeclarationStatement* newDec = *(itr);
-    std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
+    // std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
     SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
     if(varDec != NULL) {
       newStatement = copyStatement(varDec);
@@ -236,7 +276,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       bool undefined = false;
       if(defDec != NULL) {
 	ROSE_ASSERT(fnSymbol != NULL);
-	//std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
+	//	std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
 	if(memFunction != NULL) {
 	  /**
 	     What we have is a class member function.
@@ -279,11 +319,13 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 
 	  } else {
 	    // this pointer.
-	    std::cout<<"SgDot Expression is NULL "<<get_name(callExpr)<<std::endl;
+	    // std::cout<<"SgDot Expression is NULL "<<get_name(callExpr)<<std::endl;
 
 	    objectExpr = 
 	      buildVarRefExp (thisName, newScope);
 	  }
+	  
+
 
 	  /* if the class is one of the system classes, we skip definition.*/
 	  if(undefined == false) {
@@ -298,41 +340,55 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 
 
 	  if(undefined == false) {
-	  ROSE_ASSERT(objectExpr != NULL);
-	  SgMemberFunctionDeclaration* classFunctionDec = 
-	    isSgMemberFunctionDeclaration(defDec);
-	  ROSE_ASSERT(classFunctionDec != NULL);
-	  ROSE_ASSERT(classDec != NULL);
+	    ROSE_ASSERT(objectExpr != NULL);
+	    SgMemberFunctionDeclaration* classFunctionDec = 
+	      isSgMemberFunctionDeclaration(defDec);
+	    ROSE_ASSERT(classFunctionDec != NULL);
+	    ROSE_ASSERT(classDec != NULL);
 	    classDec  = 
 	      classFunctionDec->get_associatedClassDeclaration();
-	  
-
-	  addToClassDeclarations(classDec);
-
-	  SgName functionName = 
-	    classDec->get_name() + "_" +  fnSymbol->get_name();
-
-
-	  std::cout<<"The newly created function name is "<< functionName <<" from original function name "<<fnSymbol->get_name()<<" and className "<<classDec->get_name()<<std::endl;
-
-
-	  
-
-	  SgExprListExp* expList = callExpr->get_args();
-	  SgExprListExp* newExprList = 
-	    isSgExprListExp(expList->copy(expCopyHelp));
-	  SgExprStatement *newExpStatement = NULL;
-	  newExprList->prepend_expression(objectExpr);	    
-	  ROSE_ASSERT(newExprList != NULL);
-	  // SgType * newType = new SgType(*callExpr->get_type());
-	  // ROSE_ASSERT(newType != NULL);
-	  SgScopeStatement* scopeStmt = getScope(callExpr);
-	  ROSE_ASSERT(scopeStmt != NULL);
-	  SgFunctionCallExp* newfunctionCallExpr = 
-	    buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
-				 scopeStmt);
-	  replaceExpression(callExpr, newfunctionCallExpr);
+	    
+	    SgName functionName = 
+	      classDec->get_name() + "_" +  fnSymbol->get_name();
+	    undefined = skipTheFunction(functionName);
 	  }
+
+	  
+	  if(undefined == false) {
+	    SgName functionName = 
+	      classDec->get_name() + "_" +  fnSymbol->get_name();
+	    SgMemberFunctionDeclaration* classFunctionDec = 
+	      isSgMemberFunctionDeclaration(defDec);
+	    
+	    addToClassDeclarations(classDec);
+	    
+	    
+
+	    std::cout<< "The newly created function name is "<< functionName 
+	    	     << " from original function name "<< fnSymbol->get_name()
+	    	     << " and className "<< classDec->get_name()<<std::endl;
+	    
+	    
+	    
+	    
+	    SgExprListExp* expList = callExpr->get_args();
+	    SgExprListExp* newExprList = 
+	      isSgExprListExp(expList->copy(expCopyHelp));
+	    SgExprStatement *newExpStatement = NULL;
+	    newExprList->prepend_expression(objectExpr);	    
+	    ROSE_ASSERT(newExprList != NULL);
+	    // SgType * newType = new SgType(*callExpr->get_type());
+	    // ROSE_ASSERT(newType != NULL);
+	    SgScopeStatement* scopeStmt = getScope(callExpr);
+	    ROSE_ASSERT(scopeStmt != NULL);
+	    SgFunctionCallExp* newfunctionCallExpr = 
+	      buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
+				   scopeStmt);
+	    replaceExpression(callExpr, newfunctionCallExpr);
+	  }
+	} else {
+	  SgName funName  = fnDec->get_name();
+	  undefined = skipTheFunction(funName);
 	}
 	
 	
@@ -346,7 +402,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  ROSE_ASSERT(fnDec != NULL);
 	
 	  if(newfnDec == NULL) {
-	    std::cout<<"The function without declaration is "<<fnDec->get_name()<<std::endl;
+	    // std::cout<<"The function without declaration is "<<fnDec->get_name()<<std::endl;
 	  }
 	  
 	  
@@ -363,7 +419,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  if(found == NULL) {
 	    ROSE_ASSERT(fnDec != NULL);
 	    ROSE_ASSERT(newfnDec != NULL);
-	    //  std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
+	    std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
 	    found  = new  FunctionClassDetails(newfnDec, callExpr, classDec);
 	    ROSE_ASSERT(found != NULL);
 	    baseFunctionList.push_back(found);
