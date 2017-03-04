@@ -117,6 +117,8 @@ struct FunctionClassDetails {
   }
 };
 
+
+
 SgScopeStatement *outermostScope = NULL;
 SgFunctionDeclaration* baseFunctionDeclaration = NULL;
 std::vector<FunctionClassDetails*> baseFunctionList;
@@ -222,7 +224,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   
   decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;  
 
-  decFile<<"typedef struct "<<className<<" "<<className<<";\n"; 
+  outFile<<"typedef struct "<<className<<" "<<className<<";\n"; 
 }
 
 
@@ -511,6 +513,14 @@ int main ( int argc, char** argv )
     unparseCPPtoCandPrint(def, newFnDeclaration);
     itr++;
   }
+
+  std::vector<SgClassDeclaration*>::iterator clsitr = classSymbolsUsed.begin();
+  while(clsitr != classSymbolsUsed.end()) {
+    std::cout<<"Out class"<<std::endl;
+    unparseClasstoStruct((*clsitr)->get_definition());
+    clsitr++;
+  }
+  
 #ifdef GREENMARL_CONVERSION
 
   std::string argumentList = "(";
