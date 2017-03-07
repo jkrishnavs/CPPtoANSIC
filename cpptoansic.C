@@ -125,26 +125,6 @@ std::vector<FunctionClassDetails*> baseFunctionList;
 std::vector<SgClassDeclaration*> classSymbolsUsed;
 std::ofstream outFile;
 std::ofstream decFile;
-
-
-
-bool addToClassDeclarations(SgClassDeclaration* classDec) {
-  SgClassDeclaration* found  =  NULL;
-  ROSE_ASSERT(classDec != NULL);
-  for(std::vector<SgClassDeclaration*>::iterator itr = classSymbolsUsed.begin();
-      itr != classSymbolsUsed.end(); itr++) {
-    if(* itr == classDec) {
-      found =  *itr;
-      break;
-    }
-  }
-  if(found != NULL)
-    return false;
-  
-  classSymbolsUsed.push_back(classDec);
-  return true;
-}
-
 SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList);
 void getSuitableFunctionName(FunctionClassDetails* cur, 
 			     SgName&  newName);
@@ -153,287 +133,9 @@ SgFunctionDeclaration * copyFunctionDeclaration(FunctionClassDetails* cur);
 void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope);
 void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, 
 			   SgFunctionDeclaration* newFunctionDeclaration);
-
-
-SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList ) { 
-  SgFunctionParameterList *newFunParamsList = new SgFunctionParameterList();
-  SgInitializedNamePtrList& arglist = origList->get_args();
-  SgInitializedNamePtrList::iterator origFunArgsIter = arglist.begin();
-  for(; origFunArgsIter != arglist.end(); ++origFunArgsIter) {
-    ROSE_ASSERT((*origFunArgsIter) != NULL);
-    SgType *varType = (*origFunArgsIter)->get_type();
-    ROSE_ASSERT(varType != NULL);
-    SgReferenceType *refType = isSgReferenceType(varType);
-    if(refType != NULL) {
-      varType = refType->get_base_type();
-    }
-    if(isSgClassType(varType) == NULL) {
-      SgInitializedName* classArg = buildInitializedName( (* origFunArgsIter)->get_name(),
-     							  (* origFunArgsIter)->get_type());
-      appendArg(newFunParamsList, classArg);
-    } else {
-      SgInitializedName *classArg = buildInitializedName(GM_GRAPH_NAME
-     							 ,buildPointerType(buildVoidType()));
-      appendArg(newFunParamsList, classArg); 
-    }
-  }
-  return newFunParamsList;
-}
-
-
-void unparseClasstoStruct(SgClassDefinition* classDef) {
-  SgScopeStatement* outerMostScope = classDef->get_scope(); 
-  ROSE_ASSERT(outerMostScope != NULL);
-  SgTemplateInstantiationDefn* tempDefinition = isSgTemplateInstantiationDefn(classDef);
-  SgTemplateClassDefinition* templateDef = isSgTemplateClassDefinition(classDef);
-  
-  if(tempDefinition != NULL || templateDef != NULL)
-    return;
-  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
-  if(decStatements.size() == 0)
-    return;
-
-  std::string className = classDef->get_declaration()->get_name();
-  ROSE_ASSERT(!className.empty());
-  // std::cout<<"The class unparsed is "<<className<<std::endl;
-
-  SgClassDeclaration* classtoStructDecl = NULL;
-  classtoStructDecl = buildStructDeclaration(className, outermostScope);
-  ROSE_ASSERT(classtoStructDecl!= NULL);
-  
-
-  SgClassDefinition *structDef = classtoStructDecl->get_definition();
-  ROSE_ASSERT(structDef != NULL);
-  SgScopeStatement* structDefScope = isSgScopeStatement(structDef);
-  ROSE_ASSERT(structDefScope!= NULL);
-
-
-  
-  SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
-  SgStatement* newStatement = NULL; 
-  for(; itr != decStatements.end(); ++itr) {
-    SgDeclarationStatement* newDec = *(itr);
-    // std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
-    SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
-    if(varDec != NULL) {
-      newStatement = copyStatement(varDec);
-      ROSE_ASSERT(newStatement != NULL);
-      //      appendStatement(newStatement, structDefScope);
-    }
-  }
-  
-  decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;  
-
-  outFile<<"typedef struct "<<className<<" "<<className<<";\n"; 
-}
-
-
-void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
-
-  /**
-     Make a copy of all statements in the original scope into the new scope and
-     work on the new scope.
-   **/
-  SgStatementPtrList  bodyStatements = originalScope->getStatementList();
-  SgStatement* newStatement  = NULL;
-  for (SgStatementPtrList::iterator k = 
-	 bodyStatements.begin(); k < bodyStatements.end(); ++k) {
-       SgStatement* curStatement = *k;
-       newStatement = copyStatement(curStatement);
-       ROSE_ASSERT(newStatement != NULL);
-       appendStatement(newStatement, newScope);
-  }
-  
-
-  /**
-     Collect all  function calls made
-   **/
-
-  Rose_STL_Container<SgNode*> funCallList =
-    NodeQuery::querySubTree(newScope, V_SgFunctionCallExp);
-
-  /**
-     For all function calls made make changes on class member function calls.
-   **/
-  Rose_STL_Container<SgNode*>::iterator itr = funCallList.begin();
-  for (; itr != funCallList.end(); itr++) {
-    SgFunctionCallExp *callExpr = isSgFunctionCallExp(*itr);
-    if (callExpr != NULL) {
-      
-      SgFunctionDeclaration*  fnDec = 
-	callExpr-> getAssociatedFunctionDeclaration();
-      
-      SgDeclarationStatement* defDec = fnDec->get_definingDeclaration();
-      SgFunctionSymbol* fnSymbol = 
-	callExpr->getAssociatedFunctionSymbol();
-      SgMemberFunctionSymbol* memFunction = 
-	isSgMemberFunctionSymbol(fnSymbol);	
-      SgClassDeclaration* classDec = NULL;
-      SgTreeCopy expCopyHelp;
-      
-      //      std::cout<<"Call Expr "<<get_name(callExpr)<<std::endl;
-
-      SgClassDeclaration* classDeclaration;
-
-      bool undefined = false;
-      if(defDec != NULL) {
-	ROSE_ASSERT(fnSymbol != NULL);
-	//	std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
-	if(memFunction != NULL) {
-	  /**
-	     What we have is a class member function.
-	     Chaneg the function name  to 
-	     classname_function name
-	     prepent the class object to the function list.
-	  **/
-	  // std::cout<<"Its a member function "<<get_name(callExpr->get_function())<<std::endl;
-
-	  
-	  SgDotExp* dotExpr = isSgDotExp(callExpr->get_function());
-	  SgArrowExp* arrowExpr = isSgArrowExp(callExpr->get_function());
-	  SgExpression* object = NULL;
-	  SgExpression* objectExpr = NULL;
-	  if(dotExpr != NULL) {
-	    
-	    object = dotExpr->get_lhs_operand();
-	    ROSE_ASSERT(object != NULL);
-	    ROSE_ASSERT(object != NULL);
-	    SgVarRefExp* refExpr = isSgVarRefExp(object);
-	    if(refExpr == NULL){
-	      // this means standard library function calls
-	      undefined = true;
-	    } else {
-	      objectExpr = 
-		isSgExpression(refExpr->copy(expCopyHelp));
-	    }
-	  } else if(arrowExpr != NULL) {
-	    	    
-	    object = arrowExpr->get_lhs_operand();
-	    ROSE_ASSERT(object != NULL);
-	    SgVarRefExp* refExpr = isSgVarRefExp(object);
-	    if(refExpr == NULL){
-	      // this means standard library function calls
-	      undefined = true;
-	    } else {
-	      objectExpr = 
-		isSgExpression(refExpr->copy(expCopyHelp));
-	    }
-
-	  } else {
-	    // this pointer.
-	    // std::cout<<"SgDot Expression is NULL "<<get_name(callExpr)<<std::endl;
-
-	    objectExpr = 
-	      buildVarRefExp (thisName, newScope);
-	  }
-	  
-
-
-	  /* if the class is one of the system classes, we skip definition.*/
-	  if(undefined == false) {
-	    SgMemberFunctionDeclaration* classFunctionDec = 
-	    isSgMemberFunctionDeclaration(defDec);
-	  ROSE_ASSERT(classFunctionDec != NULL);
-	    classDec  = 
-	      classFunctionDec->get_associatedClassDeclaration();
-	    ROSE_ASSERT(classDec != NULL);
-	    undefined = skipTheClass(classDec->get_name());
-	  }
-
-
-	  if(undefined == false) {
-	    ROSE_ASSERT(objectExpr != NULL);
-	    SgMemberFunctionDeclaration* classFunctionDec = 
-	      isSgMemberFunctionDeclaration(defDec);
-	    ROSE_ASSERT(classFunctionDec != NULL);
-	    ROSE_ASSERT(classDec != NULL);
-	    classDec  = 
-	      classFunctionDec->get_associatedClassDeclaration();
-	    
-	    SgName functionName = 
-	      classDec->get_name() + "_" +  fnSymbol->get_name();
-	    undefined = skipTheFunction(functionName);
-	  }
-
-	  
-	  if(undefined == false) {
-	    SgName functionName = 
-	      classDec->get_name() + "_" +  fnSymbol->get_name();
-	    SgMemberFunctionDeclaration* classFunctionDec = 
-	      isSgMemberFunctionDeclaration(defDec);
-	    
-	    addToClassDeclarations(classDec);
-	    
-	    
-
-	    std::cout<< "The newly created function name is "<< functionName 
-	    	     << " from original function name "<< fnSymbol->get_name()
-	    	     << " and className "<< classDec->get_name()<<std::endl;
-	    
-	    
-	    
-	    
-	    SgExprListExp* expList = callExpr->get_args();
-	    SgExprListExp* newExprList = 
-	      isSgExprListExp(expList->copy(expCopyHelp));
-	    SgExprStatement *newExpStatement = NULL;
-	    newExprList->prepend_expression(objectExpr);	    
-	    ROSE_ASSERT(newExprList != NULL);
-	    // SgType * newType = new SgType(*callExpr->get_type());
-	    // ROSE_ASSERT(newType != NULL);
-	    SgScopeStatement* scopeStmt = getScope(callExpr);
-	    ROSE_ASSERT(scopeStmt != NULL);
-	    SgFunctionCallExp* newfunctionCallExpr = 
-	      buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
-				   scopeStmt);
-	    replaceExpression(callExpr, newfunctionCallExpr);
-	  }
-	} else {
-	  SgName funName  = fnDec->get_name();
-	  undefined = skipTheFunction(funName);
-	}
-	
-	
-	/* Add details for copying the referred function codes. 
-	   Keep a structure to avoid copying more than once.
-	*/
-   	
-	if(undefined != true) {
-	  SgFunctionDeclaration*
-	    newfnDec = isSgFunctionDeclaration(defDec); 
-	  ROSE_ASSERT(fnDec != NULL);
-	
-	  if(newfnDec == NULL) {
-	    // std::cout<<"The function without declaration is "<<fnDec->get_name()<<std::endl;
-	  }
-	  
-	  
-	  FunctionClassDetails* found  = NULL;
-	  std::vector<FunctionClassDetails*>::iterator it = 
-	    baseFunctionList.begin();
-	  for(; it != baseFunctionList.end(); it++) {
-	    if((*it)->found(newfnDec)) {
-	      found = *it;
-	      break;
-	    }
-	  }
-    
-	  if(found == NULL) {
-	    ROSE_ASSERT(fnDec != NULL);
-	    ROSE_ASSERT(newfnDec != NULL);
-	    std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
-	    found  = new  FunctionClassDetails(newfnDec, callExpr, classDec);
-	    ROSE_ASSERT(found != NULL);
-	    baseFunctionList.push_back(found);
-	  } else {
-	    found->addDetails(callExpr);
-	  }
-	}
-      }
-    }
-  }
-}
-
+bool addToClassDeclarations(SgClassDeclaration* classDec);
+SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList ) ;
+void unparseClasstoStruct(SgClassDefinition* classDef);
 
 
 
@@ -449,6 +151,8 @@ int main ( int argc, char** argv )
   SgProject* project = frontend(argc,argv);
 #endif
 
+  std::cout<<"\n\n\n************ START OF TRANSFORMATION *****************\n";
+
   
   
   outermostScope =  SageInterface::getFirstGlobalScope(project);
@@ -460,6 +164,12 @@ int main ( int argc, char** argv )
   decFile.open(tempfile.c_str());
   outFile.open(filename.c_str());
 
+#ifdef GREENMARL_CONVERSION
+  outFile<<"#include<stdio.h> \ntypedef signed int int32_t; \ntypedef int32_t edge_t;"
+	 <<"\ntypedef int32_t node_t; \ntypedef int32_t edge_id; \ntypedef int32_t node_id;"
+	 <<"\ntypedef int32_t edge_t; \nstruct vector; \ntypedef struct vector vector; "
+	 <<"\nstruct iterator; \ntypedef struct iterator iterator; \ntypedef size_t size_type; \n";
+#endif
 
   SgFilePtrList & ptr_list = project->get_fileList();
   
@@ -469,9 +179,27 @@ int main ( int argc, char** argv )
     SgSourceFile * sfile = isSgSourceFile(sageFile);
     ROSE_ASSERT(sfile);
     SgGlobal *root = sfile->get_globalScope();
+
+
+    // normalize all for loops if necessary
+    
+    Rose_STL_Container<SgNode*> forList =
+      NodeQuery::querySubTree(root, V_SgForStatement);
+    
+    Rose_STL_Container<SgNode*>::iterator forItr = forList.begin();
+    for (; forItr != forList.end(); forItr++) {
+      SgForStatement* loop = isSgForStatement(*forItr);
+      ROSE_ASSERT(loop != NULL);
+      normalizeForLoopInitDeclaration (loop);
+      
+      //      std::cout<<loop->unparseToCompleteString()<<std::endl;
+    }
+
+
     SgDeclarationStatementPtrList& declList = root->get_declarations ();
     bool hasOpenMP= false; 
 
+    
 
     for (SgDeclarationStatementPtrList::iterator p = declList.begin(); 
 	 p != declList.end(); ++p) {
@@ -516,13 +244,12 @@ int main ( int argc, char** argv )
 
   std::vector<SgClassDeclaration*>::iterator clsitr = classSymbolsUsed.begin();
   while(clsitr != classSymbolsUsed.end()) {
-    std::cout<<"Out class"<<std::endl;
+    // std::cout<<"Out class"<<std::endl;
     unparseClasstoStruct((*clsitr)->get_definition());
     clsitr++;
   }
   
 #ifdef GREENMARL_CONVERSION
-
   std::string argumentList = "(";
   SgFunctionParameterList* paramList = fndefinition->get_parameterList();
   ROSE_ASSERT(paramList != NULL);
@@ -534,18 +261,18 @@ int main ( int argc, char** argv )
     argumentList += ", NULL" ;
   }
   argumentList += ")";
-
+  
   outFile<<"\n\n int main() {\n" 
 	 <<"   gm_graph gm;\n  "
          << fnName << argumentList <<";"
 	 <<" \n  return 0; \n\n }";
 #endif
   decFile.close();  
-  // std::ifstream definitionFile;
-  // definitionFile.open(tempfile.c_str());
-  // for (std::string str; std::getline(definitionFile, str); ) {
-  //   outFile << str;
-  // }
+  std::ifstream definitionFile;
+  definitionFile.open(tempfile.c_str());
+  for (std::string str; std::getline(definitionFile, str); ) {
+    outFile << str << std::endl;
+  }
 
   outFile.close();
   //  definitionFile.close();
@@ -660,3 +387,360 @@ SgFunctionDeclaration* copyFunctionDeclaration(FunctionClassDetails* cur) {
 std::string getbasename() {
   return std::string("base");
 }
+
+bool addToClassDeclarations(SgClassDeclaration* classDec) {
+  SgClassDeclaration* found  =  NULL;
+  ROSE_ASSERT(classDec != NULL);
+  for(std::vector<SgClassDeclaration*>::iterator itr = classSymbolsUsed.begin();
+      itr != classSymbolsUsed.end(); itr++) {
+    if(* itr == classDec) {
+      found =  *itr;
+      break;
+    }
+  }
+  if(found != NULL)
+    return false;
+  
+  classSymbolsUsed.push_back(classDec);
+  return true;
+}
+
+void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
+
+  /**
+     Make a copy of all statements in the original scope into the new scope and
+     work on the new scope.
+   **/
+  SgStatementPtrList  bodyStatements = originalScope->getStatementList();
+  SgStatement* newStatement  = NULL;
+  for (SgStatementPtrList::iterator k = 
+	 bodyStatements.begin(); k < bodyStatements.end(); ++k) {
+       SgStatement* curStatement = *k;
+       newStatement = copyStatement(curStatement);
+       ROSE_ASSERT(newStatement != NULL);
+       appendStatement(newStatement, newScope);
+  }
+
+  Rose_STL_Container<SgNode*> classObjects =
+    NodeQuery::querySubTree(newScope,  V_SgVariableDeclaration);
+
+  Rose_STL_Container<SgNode*>::iterator clsItr = classObjects.begin();
+  for (; clsItr != classObjects.end(); clsItr++) {
+    SgVariableDeclaration * classDec = isSgVariableDeclaration(*clsItr);
+    ROSE_ASSERT(classDec != NULL);
+    //    SgClassDeclaration * sgclass = isSgClassDeclaration();
+    SgType * myType = getFirstVarType (classDec);
+    // if(myType != NULL)
+    //   std::cout<<"The class used is "<<myType->class_name()<<std::endl;
+
+    SgTypedefType* typedefType = isSgTypedefType(myType);
+
+    if(typedefType != NULL) {
+      //   std::cout<<"The class name is "<<typedefType->get_name()<<std::endl;
+    }
+    
+    SgPointerType* ptrType = isSgPointerType(myType);
+    
+    while(ptrType != NULL) {
+      myType = ptrType->get_base_type ();
+      ptrType = isSgPointerType(myType);
+    }
+
+    SgClassType* classType = isSgClassType(myType);
+    if(classType != NULL) {
+      //  std::cout<<"The class name is "<<classType->get_name()<<std::endl;
+    }
+  }
+
+
+  /**
+     TODO Collect all class object declartion to equivalent struct
+   **/
+  Rose_STL_Container<SgNode*> varDecList =
+    NodeQuery::querySubTree(newScope, V_SgVariableDeclaration);
+  Rose_STL_Container<SgNode*>::iterator itr = varDecList.begin();
+  for (; itr != varDecList.end(); itr++) {
+    SgVariableDeclaration *varDec = isSgVariableDeclaration(*itr);
+    ROSE_ASSERT(varDec != NULL);
+    SgVariableDefinition *varDef =  varDec->get_definition();
+    ROSE_ASSERT(varDef != NULL);
+
+    std::cout<<"The Declaration statement is "<<varDec->unparseToCompleteString()<<std::endl;
+  }
+  
+
+  /**
+     TODO Collect all new to malloc
+   **/
+  
+
+  /**
+     Collect all  function calls made
+   **/
+
+  Rose_STL_Container<SgNode*> funCallList =
+    NodeQuery::querySubTree(newScope, V_SgFunctionCallExp);
+
+  /**
+     For all function calls made make changes on class member function calls.
+   **/
+  itr = funCallList.begin();
+  for (; itr != funCallList.end(); itr++) {
+    SgFunctionCallExp *callExpr = isSgFunctionCallExp(*itr);
+    if (callExpr != NULL) {
+      
+      SgFunctionDeclaration*  fnDec = 
+	callExpr-> getAssociatedFunctionDeclaration();
+      
+      SgDeclarationStatement* defDec = fnDec->get_definingDeclaration();
+      SgFunctionSymbol* fnSymbol = 
+	callExpr->getAssociatedFunctionSymbol();
+      SgMemberFunctionSymbol* memFunction = 
+	isSgMemberFunctionSymbol(fnSymbol);	
+      SgClassDeclaration* classDec = NULL;
+      SgTreeCopy expCopyHelp;
+      
+      //      std::cout<<"Call Expr "<<get_name(callExpr)<<std::endl;
+
+      SgClassDeclaration* classDeclaration;
+
+      bool undefined = false;
+      if(defDec != NULL) {
+	ROSE_ASSERT(fnSymbol != NULL);
+	//	std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
+	if(memFunction != NULL) {
+	  /**
+	     What we have is a class member function.
+	     Chaneg the function name  to 
+	     classname_function name
+	     prepent the class object to the function list.
+	  **/
+	  // std::cout<<"Its a member function "<<get_name(callExpr->get_function())<<std::endl;
+
+	  
+	  SgDotExp* dotExpr = isSgDotExp(callExpr->get_function());
+	  SgArrowExp* arrowExpr = isSgArrowExp(callExpr->get_function());
+	  SgExpression* object = NULL;
+	  SgExpression* objectExpr = NULL;
+	  if(dotExpr != NULL) {
+	    
+	    object = dotExpr->get_lhs_operand();
+	    ROSE_ASSERT(object != NULL);
+	    ROSE_ASSERT(object != NULL);
+	    SgVarRefExp* refExpr = isSgVarRefExp(object);
+	    if(refExpr == NULL){
+	      // this means standard library function calls
+	      undefined = true;
+	    } else {
+	      objectExpr = 
+		isSgExpression(refExpr->copy(expCopyHelp));
+	    }
+	  } else if(arrowExpr != NULL) {
+	    	    
+	    object = arrowExpr->get_lhs_operand();
+	    ROSE_ASSERT(object != NULL);
+	    SgVarRefExp* refExpr = isSgVarRefExp(object);
+	    if(refExpr == NULL){
+	      // this means standard library function calls
+	      undefined = true;
+	    } else {
+	      objectExpr = 
+		isSgExpression(refExpr->copy(expCopyHelp));
+	    }
+
+	  } else {
+	    // this pointer.
+	    // std::cout<<"SgDot Expression is NULL "<<get_name(callExpr)<<std::endl;
+
+	    objectExpr = 
+	      buildVarRefExp (thisName, newScope);
+	  }
+	  
+
+
+	  /* if the class is one of the system classes, we skip definition.*/
+	  if(undefined == false) {
+	    SgMemberFunctionDeclaration* classFunctionDec = 
+	    isSgMemberFunctionDeclaration(defDec);
+	  ROSE_ASSERT(classFunctionDec != NULL);
+	    classDec  = 
+	      classFunctionDec->get_associatedClassDeclaration();
+	    ROSE_ASSERT(classDec != NULL);
+	    undefined = skipTheClass(classDec->get_name());
+	  }
+
+
+	  if(undefined == false) {
+	    ROSE_ASSERT(objectExpr != NULL);
+	    SgMemberFunctionDeclaration* classFunctionDec = 
+	      isSgMemberFunctionDeclaration(defDec);
+	    ROSE_ASSERT(classFunctionDec != NULL);
+	    ROSE_ASSERT(classDec != NULL);
+	    classDec  = 
+	      classFunctionDec->get_associatedClassDeclaration();
+	    
+	    SgName functionName = 
+	      classDec->get_name() + "_" +  fnSymbol->get_name();
+	    undefined = skipTheFunction(functionName);
+	  }
+
+	  
+	  if(undefined == false) {
+	    SgName functionName = 
+	      classDec->get_name() + "_" +  fnSymbol->get_name();
+	    SgMemberFunctionDeclaration* classFunctionDec = 
+	      isSgMemberFunctionDeclaration(defDec);
+	    
+	    addToClassDeclarations(classDec);
+	    
+	    
+
+	    // std::cout<< "The newly created function name is "<< functionName 
+	    // 	     << " from original function name "<< fnSymbol->get_name()
+	    // 	     << " and className "<< classDec->get_name()<<std::endl;
+	    
+	    
+	    
+	    
+	    SgExprListExp* expList = callExpr->get_args();
+	    SgExprListExp* newExprList = 
+	      isSgExprListExp(expList->copy(expCopyHelp));
+	    SgExprStatement *newExpStatement = NULL;
+	    newExprList->prepend_expression(objectExpr);	    
+	    ROSE_ASSERT(newExprList != NULL);
+	    // SgType * newType = new SgType(*callExpr->get_type());
+	    // ROSE_ASSERT(newType != NULL);
+	    SgScopeStatement* scopeStmt = getScope(callExpr);
+	    ROSE_ASSERT(scopeStmt != NULL);
+	    SgFunctionCallExp* newfunctionCallExpr = 
+	      buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
+				   scopeStmt);
+	    replaceExpression(callExpr, newfunctionCallExpr);
+	  }
+	} else {
+	  SgName funName  = fnDec->get_name();
+	  undefined = skipTheFunction(funName);
+	}
+	
+	
+	/* Add details for copying the referred function codes. 
+	   Keep a structure to avoid copying more than once.
+	*/
+   	
+	if(undefined != true) {
+	  SgFunctionDeclaration*
+	    newfnDec = isSgFunctionDeclaration(defDec); 
+	  ROSE_ASSERT(fnDec != NULL);
+	
+	  if(newfnDec == NULL) {
+	    // std::cout<<"The function without declaration is "<<fnDec->get_name()<<std::endl;
+	  }
+	  
+	  
+	  FunctionClassDetails* found  = NULL;
+	  std::vector<FunctionClassDetails*>::iterator it = 
+	    baseFunctionList.begin();
+	  for(; it != baseFunctionList.end(); it++) {
+	    if((*it)->found(newfnDec)) {
+	      found = *it;
+	      break;
+	    }
+	  }
+    
+	  if(found == NULL) {
+	    ROSE_ASSERT(fnDec != NULL);
+	    ROSE_ASSERT(newfnDec != NULL);
+	    // std::cout<<"The new function added "<<fnDec->get_name()<<std::endl;
+	    found  = new  FunctionClassDetails(newfnDec, callExpr, classDec);
+	    ROSE_ASSERT(found != NULL);
+	    baseFunctionList.push_back(found);
+	  } else {
+	    found->addDetails(callExpr);
+	  }
+	}
+      }
+    }
+  }
+}
+
+
+
+SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList ) { 
+  SgFunctionParameterList *newFunParamsList = new SgFunctionParameterList();
+  SgInitializedNamePtrList& arglist = origList->get_args();
+  SgInitializedNamePtrList::iterator origFunArgsIter = arglist.begin();
+  for(; origFunArgsIter != arglist.end(); ++origFunArgsIter) {
+    ROSE_ASSERT((*origFunArgsIter) != NULL);
+    SgType *varType = (*origFunArgsIter)->get_type();
+    ROSE_ASSERT(varType != NULL);
+    SgReferenceType *refType = isSgReferenceType(varType);
+    if(refType != NULL) {
+      varType = refType->get_base_type();
+    }
+    if(isSgClassType(varType) == NULL) {
+      SgInitializedName* classArg = buildInitializedName( (* origFunArgsIter)->get_name(),
+     							  (* origFunArgsIter)->get_type());
+      appendArg(newFunParamsList, classArg);
+    } else {
+      SgInitializedName *classArg = buildInitializedName(GM_GRAPH_NAME
+     							 ,buildPointerType(buildVoidType()));
+      appendArg(newFunParamsList, classArg); 
+    }
+  }
+  return newFunParamsList;
+}
+
+void unparseClasstoStruct(SgClassDefinition* classDef) {
+
+
+  std::string className = classDef->get_declaration()->get_name();
+  ROSE_ASSERT(!className.empty());
+  std::cout<<"The class unparsed is "<<className<<std::endl;
+  
+  SgScopeStatement* outerMostScope = classDef->get_scope(); 
+  ROSE_ASSERT(outerMostScope != NULL);
+  SgTemplateInstantiationDefn* tempDefinition = isSgTemplateInstantiationDefn(classDef);
+  SgTemplateClassDefinition* templateDef = isSgTemplateClassDefinition(classDef);
+  
+  SgClassDeclaration* definingDec = isSgClassDeclaration(classDef->get_declaration()->get_declaration_associated_with_symbol()->get_definingDeclaration());
+  
+  ROSE_ASSERT(definingDec != NULL);
+  //std::cout<<"The class data is \n"<<definingDec->unparseToCompleteString()<<std::endl;
+  
+  if(tempDefinition != NULL || templateDef != NULL)
+    return;
+
+  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
+  if(decStatements.size() == 0)
+    return;
+
+  SgClassDeclaration* classtoStructDecl = NULL;
+  classtoStructDecl = buildStructDeclaration(className, outermostScope);
+  ROSE_ASSERT(classtoStructDecl!= NULL);
+  
+
+  SgClassDefinition *structDef = classtoStructDecl->get_definition();
+  ROSE_ASSERT(structDef != NULL);
+  SgScopeStatement* structDefScope = isSgScopeStatement(structDef);
+  ROSE_ASSERT(structDefScope!= NULL);
+
+
+  
+  SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
+  SgStatement* newStatement = NULL; 
+  for(; itr != decStatements.end(); ++itr) {
+    SgDeclarationStatement* newDec = *(itr);
+    // std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
+    SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
+    if(varDec != NULL) {
+      newStatement = copyStatement(varDec);
+      ROSE_ASSERT(newStatement != NULL);
+      appendStatement(newStatement, structDefScope);
+    }
+  }
+  decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;
+  outFile<<"struct "<<className<<";\n";
+  outFile<<"typedef struct "<<className<<" "<<className<<";\n";
+  
+}
+
