@@ -434,6 +434,9 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     // if(myType != NULL)
     //   std::cout<<"The class used is "<<myType->class_name()<<std::endl;
 
+
+
+
     SgTypedefType* typedefType = isSgTypedefType(myType);
 
     if(typedefType != NULL) {
@@ -468,9 +471,10 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     SgVariableDefinition *varDef =  varDec->get_definition();
     ROSE_ASSERT(varDef != NULL);
     
+    SgType* declarationType = varDef->get_type();
     SgType* myType = varDef->get_type();
-
     SgPointerType* ptrType = isSgPointerType(myType);
+    
     
     while(ptrType != NULL) {
       myType = ptrType->get_base_type ();
@@ -482,58 +486,98 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       refType = isSgReferenceType(myType);
     }
     SgClassType* classType = isSgClassType(myType);
-    SgFunctionCallExp *newCallExpr = NULL;
+    SgNewExp *newExpr = NULL;
 
 
-    Rose_STL_Container<SgNode*> mallocCallList =
-    NodeQuery::querySubTree(varDec, V_SgFunctionCallExp);
+    Rose_STL_Container<SgNode*> newList =
+    NodeQuery::querySubTree(varDec, V_SgNewExp);
 
 
-    Rose_STL_Container<SgNode*>::iterator funItr = mallocCallList.begin();
-    for (; funItr != mallocCallList.end(); funItr++) {
-      SgFunctionCallExp* newCall  = isSgFunctionCallExp(*funItr);
-      std::cout<<"The function being called is "<<newCall->getAssociatedFunctionDeclaration()->get_name()<<std::endl; 
+    Rose_STL_Container<SgNode*>::iterator funItr = newList.begin();
+    for (; funItr != newList.end(); funItr++) {
+      SgNewExp* newCall  = isSgNewExp(*funItr);
+      if(newCall != NULL)
+	newExpr = newCall;
     }
-
-    if(classType == NULL && newCallExpr != NULL) {
-      //TODO  just change new to malloc
-      
-
-    } else if(classType != NULL && newCallExpr == NULL) {
-      //  std::cout<<"The class name is "<<classType->get_name()<<std::endl;
-      std::cout<<"The Declaration statement is "<<varDec->unparseToCompleteString()<<std::endl;
-      std::cout<<"The type of the declaration is "<<varDef->get_type()->class_name()<<std::endl;
-      // TODO found the declarationstatement. Now simply replace it also add # pragmas
-   
-      //buildPragmaDeclaration (const std::string &name, SgScopeStatement *scope=NULL)
-      // use void pointer voidPtrType  and the_pragma_skip.
-      //buildVariableDeclaration (const SgName &name, SgType *type, SgInitializer *varInit=NULL, SgScopeStatement *scope=NULL)
-      //insertStatement (SgStatement *targetStmt, SgStatement *newStmt, bool insertBefore=true, bool autoMovePreprocessingInfo=true)
-      //replaceStatement (SgStatement *oldStmt, SgStatement *newStmt, bool movePreprocessinInfo=false)
-    } else if(classType != NULL && newCallExpr != NULL) {
-
-
-    }
- 
     
 
+    std::string originalString  = varDec->unparseToCompleteString();
+    std::string pragmaString = the_pragma_skip + originalString;
+    SgName varName = <varDef->get_vardefn()->get_qualified_name();
 
-
+    if(classType == NULL && newExpr != NULL) {
+      SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+      ROSE_ASSERT(pragmaDec != NULL);
+      // TODO add malloc expression here
+      SgInitilizer* mallocInitializer = NULL;
+      SgVariableDeclaration* newVarDec = buildVariableDeclaration(varName, declarationType, mallocInitializer, newScope);
+      ROSE_ASSERT(newVarDec != NULL);
+      insertStatement(varDec, pragmaDec, true, true);
+      replaceStatement(varDec, newVarDec, false);
+    } else if(classType != NULL && newExpr == NULL) {
+      SgName className = classType->get_name();
+      SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+      ROSE_ASSERT(pragmaDec != NULL);
+      //TODO create a proper struct type instead  of using voidPtrType
+      //TODO copy the initializer sageInterface::getInitializerOfExpression (SgExpression *n)
+      SgInitializer* defaultInitializer = NULL; 
+      SgVariableDeclaration* newVarDec = buildVariableDeclaration (varName, voidPtrType, defaultInitializer, newScope);
+      ROSE_ASSERT(newVarDec != NULL);
+      insertStatement(varDec, pragmaDec, true, true);
+      replaceStatement(varDec, newVarDec, false)
+    } else if(classType != NULL && newExpr != NULL) {
+      SgName className = classType->get_name();
+      SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+      ROSE_ASSERT(pragmaDec != NULL);
+      //TODO create a proper struct type instead  of using voidPtrType
+      //TODO add  malloc expression here
+      SgInitializer* mallocInitializer = NULL; 
+      SgVariableDeclaration* newVarDec = buildVariableDeclaration (varName, voidPtrType, mallocInitializer, newScope);
+      ROSE_ASSERT(newVarDec != NULL);
+      insertStatement(varDec, pragmaDec, true, true);
+      replaceStatement(varDec, newVarDec, false);
+    }
   }
   
 
   /**
      TODO Collect all new to malloc
+     which are not part of the declaration statements 
    **/
   
-  Rose_STL_Container<SgNode*> mallocCallList =
-    NodeQuery::querySubTree(newScope, V_SgFunctionCallExp);
+  Rose_STL_Container<SgNode*> newList =
+    NodeQuery::querySubTree(newScope, V_SgNewExp);
   
 
-  Rose_STL_Container<SgNode*>::iterator funItr = mallocCallList.begin();
-  for (; funItr != mallocCallList.end(); funItr++) {
-    SgFunctionCallExp* newCall  = isSgFunctionCallExp(*funItr);
-    std::cout<<"The outside function being called is "<<newCall->getAssociatedFunctionDeclaration()->get_name()<<std::endl; 
+  Rose_STL_Container<SgNode*>::iterator funItr = newList.begin();
+  for (; funItr != newList.end(); funItr++) {
+    SgNewExp* newCall  = isSgNewExp(*funItr);
+    ROSE_ASSERT(newCall != NULL);
+    SgStatement* parentStatement =  getEnclosingStatement(newCall);
+    ROSE_ASSERT(parentStatement != NULL);
+    std::string originalString  = parentStatement->unparseToCompleteString();
+    std::string pragmaString = the_pragma_skip + originalString;
+    SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+    ROSE_ASSERT(pragmaDec != NULL);
+    // Should be an Expression statement.
+    SgExprStatement* exprStatement = isSgExprStatement(parentStatement);
+    ROSE_ASSERT(exprStatement != NULL);
+    SgExpression* expr = exprStatement->get_expression();
+    // should be assignop
+    SgAssignOp* assignOp = isSgAssignOp(expr);
+    SgExpression* lhs = assignOp->get_lhs_operand();
+    // TODO
+    SgExpression* newLhs = lhs->copy();
+    ROSE_ASSERT(newLhs != NULL);
+    // TODO generate malloc operations
+    //TODO
+    SgExpression* newRhs = NULL;
+    ROSE_ASSERT(newRHS != NULL);
+    SgAssignOp* newAssignOp = buildAssignOp(newLhs, newRhs);
+    SgExprStatement* newStatement = buildExprStatement(newAssignOp);
+    ROSE_ASSERT(newStatement != NULL);
+    insertStatement(parentStatement, pragmaDec, true, true);
+    replaceStatement(parentStatement, newStatement, false);
   }
 
   /**
