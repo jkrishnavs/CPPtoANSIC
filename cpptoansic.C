@@ -232,7 +232,6 @@ int main ( int argc, char** argv )
     SgFunctionDeclaration* declaration = curPtr->getDec();
     ROSE_ASSERT(declaration != NULL);
     SgFunctionDefinition* def = declaration->get_definition();
-    
     ROSE_ASSERT(def != NULL);
     SgBasicBlock *body = def->get_body();
     ROSE_ASSERT(body != NULL);
@@ -405,6 +404,8 @@ bool addToClassDeclarations(SgClassDeclaration* classDec) {
   return true;
 }
 
+std::string the_pragma_skip = "#pragma skip 1 ";
+
 void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
 
   /**
@@ -454,18 +455,70 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 
 
   /**
-     TODO Collect all class object declartion to equivalent struct
+     Collect all class object declartion to equivalent struct
    **/
   Rose_STL_Container<SgNode*> varDecList =
     NodeQuery::querySubTree(newScope, V_SgVariableDeclaration);
+  SgType* voidPtrType = buildPointerType(buildVoidType());
+  ROSE_ASSERT(voidPtrType != NULL);
   Rose_STL_Container<SgNode*>::iterator itr = varDecList.begin();
   for (; itr != varDecList.end(); itr++) {
     SgVariableDeclaration *varDec = isSgVariableDeclaration(*itr);
     ROSE_ASSERT(varDec != NULL);
     SgVariableDefinition *varDef =  varDec->get_definition();
     ROSE_ASSERT(varDef != NULL);
+    
+    SgType* myType = varDef->get_type();
 
-    std::cout<<"The Declaration statement is "<<varDec->unparseToCompleteString()<<std::endl;
+    SgPointerType* ptrType = isSgPointerType(myType);
+    
+    while(ptrType != NULL) {
+      myType = ptrType->get_base_type ();
+      ptrType = isSgPointerType(myType);
+    }
+    SgReferenceType* refType = isSgReferenceType(myType);
+    while(refType != NULL) {
+      myType = refType->get_base_type ();
+      refType = isSgReferenceType(myType);
+    }
+    SgClassType* classType = isSgClassType(myType);
+    SgFunctionCallExp *newCallExpr = NULL;
+
+
+    Rose_STL_Container<SgNode*> mallocCallList =
+    NodeQuery::querySubTree(varDec, V_SgFunctionCallExp);
+
+
+    Rose_STL_Container<SgNode*>::iterator funItr = mallocCallList.begin();
+    for (; funItr != mallocCallList.end(); funItr++) {
+      SgFunctionCallExp* newCall  = isSgFunctionCallExp(*funItr);
+      std::cout<<"The function being called is "<<newCall->getAssociatedFunctionDeclaration()->get_name()<<std::endl; 
+    }
+
+    if(classType == NULL && newCallExpr != NULL) {
+      //TODO  just change new to malloc
+      
+
+    } else if(classType != NULL && newCallExpr == NULL) {
+      //  std::cout<<"The class name is "<<classType->get_name()<<std::endl;
+      std::cout<<"The Declaration statement is "<<varDec->unparseToCompleteString()<<std::endl;
+      std::cout<<"The type of the declaration is "<<varDef->get_type()->class_name()<<std::endl;
+      // TODO found the declarationstatement. Now simply replace it also add # pragmas
+   
+      //buildPragmaDeclaration (const std::string &name, SgScopeStatement *scope=NULL)
+      // use void pointer voidPtrType  and the_pragma_skip.
+      //buildVariableDeclaration (const SgName &name, SgType *type, SgInitializer *varInit=NULL, SgScopeStatement *scope=NULL)
+      //insertStatement (SgStatement *targetStmt, SgStatement *newStmt, bool insertBefore=true, bool autoMovePreprocessingInfo=true)
+      //replaceStatement (SgStatement *oldStmt, SgStatement *newStmt, bool movePreprocessinInfo=false)
+    } else if(classType != NULL && newCallExpr != NULL) {
+
+
+    }
+ 
+    
+
+
+
   }
   
 
@@ -473,6 +526,15 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
      TODO Collect all new to malloc
    **/
   
+  Rose_STL_Container<SgNode*> mallocCallList =
+    NodeQuery::querySubTree(newScope, V_SgFunctionCallExp);
+  
+
+  Rose_STL_Container<SgNode*>::iterator funItr = mallocCallList.begin();
+  for (; funItr != mallocCallList.end(); funItr++) {
+    SgFunctionCallExp* newCall  = isSgFunctionCallExp(*funItr);
+    std::cout<<"The outside function being called is "<<newCall->getAssociatedFunctionDeclaration()->get_name()<<std::endl; 
+  }
 
   /**
      Collect all  function calls made
