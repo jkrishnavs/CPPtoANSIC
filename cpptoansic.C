@@ -404,7 +404,7 @@ bool addToClassDeclarations(SgClassDeclaration* classDec) {
   return true;
 }
 
-std::string the_pragma_skip = "#pragma skip 1 ";
+std::string the_pragma_skip = "skip 1 ";
 
 void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
 
@@ -503,13 +503,13 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 
     std::string originalString  = varDec->unparseToCompleteString();
     std::string pragmaString = the_pragma_skip + originalString;
-    SgName varName = <varDef->get_vardefn()->get_qualified_name();
+    SgName varName = varDef->get_vardefn()->get_qualified_name();
 
     if(classType == NULL && newExpr != NULL) {
       SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
       ROSE_ASSERT(pragmaDec != NULL);
       // TODO add malloc expression here
-      SgInitilizer* mallocInitializer = NULL;
+      SgInitializer* mallocInitializer = NULL;
       SgVariableDeclaration* newVarDec = buildVariableDeclaration(varName, declarationType, mallocInitializer, newScope);
       ROSE_ASSERT(newVarDec != NULL);
       insertStatement(varDec, pragmaDec, true, true);
@@ -524,7 +524,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       SgVariableDeclaration* newVarDec = buildVariableDeclaration (varName, voidPtrType, defaultInitializer, newScope);
       ROSE_ASSERT(newVarDec != NULL);
       insertStatement(varDec, pragmaDec, true, true);
-      replaceStatement(varDec, newVarDec, false)
+      replaceStatement(varDec, newVarDec, false);
     } else if(classType != NULL && newExpr != NULL) {
       SgName className = classType->get_name();
       SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
@@ -554,6 +554,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     SgNewExp* newCall  = isSgNewExp(*funItr);
     ROSE_ASSERT(newCall != NULL);
     SgStatement* parentStatement =  getEnclosingStatement(newCall);
+    std::cout<<"The original parent statment is"<<parentStatement->unparseToCompleteString()<<std::endl;
     ROSE_ASSERT(parentStatement != NULL);
     std::string originalString  = parentStatement->unparseToCompleteString();
     std::string pragmaString = the_pragma_skip + originalString;
@@ -566,13 +567,12 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     // should be assignop
     SgAssignOp* assignOp = isSgAssignOp(expr);
     SgExpression* lhs = assignOp->get_lhs_operand();
-    // TODO
-    SgExpression* newLhs = lhs->copy();
+    SgTreeCopy expCopyHelp;
+    SgExpression* newLhs = isSgExpression(lhs->copy(expCopyHelp));
     ROSE_ASSERT(newLhs != NULL);
     // TODO generate malloc operations
-    //TODO
-    SgExpression* newRhs = NULL;
-    ROSE_ASSERT(newRHS != NULL);
+    SgExpression* newRhs = buildNullptrValExp();
+    ROSE_ASSERT(newRhs != NULL);
     SgAssignOp* newAssignOp = buildAssignOp(newLhs, newRhs);
     SgExprStatement* newStatement = buildExprStatement(newAssignOp);
     ROSE_ASSERT(newStatement != NULL);
