@@ -168,7 +168,8 @@ int main ( int argc, char** argv )
   outFile<<"#include<stdio.h> \ntypedef signed int int32_t; \ntypedef int32_t edge_t;"
 	 <<"\ntypedef int32_t node_t; \ntypedef int32_t edge_id; \ntypedef int32_t node_id;"
 	 <<"\ntypedef int32_t edge_t; \nstruct vector; \ntypedef struct vector vector; "
-	 <<"\nstruct iterator; \ntypedef struct iterator iterator; \ntypedef size_t size_type; \n";
+	 <<"\nstruct iterator; \ntypedef struct iterator iterator; \ntypedef size_t size_type;"
+	 <<"\n#define NIL_NODE (node_t - 1)\n";
 #endif
 
   SgFilePtrList & ptr_list = project->get_fileList();
