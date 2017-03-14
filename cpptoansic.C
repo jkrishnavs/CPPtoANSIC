@@ -10,7 +10,11 @@ using namespace SageInterface;
 #define GREENMARL_CONVERSION
 #define GM_GRAPH_NAME "class_gm_graph"
 SgName thisName = "this";
- 
+
+
+std::string the_pragma_skip   = "skip 1 ";
+std::string the_pragma_call   = "skip fnCall";
+std::string the_pragma_fnDef  = "skip fnDef"; 
 
 
 /**
@@ -60,24 +64,9 @@ std::string functionsTobeSkipped[] =
 int sizeofClassesTobeSkipped = 8;
 int sizeofFunctionsTobeSkipped = 26;
 
-bool skipTheFunction(SgName funName) {
-  // std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
-  for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
-    if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
-      return true;
-  }
-  return false;
-}
 
-bool skipTheClass(SgName className) {
-  //  std::cout<<"The class to be skipped is "<<className.getString()<<std::endl;
-  for(int i=0; i < sizeofClassesTobeSkipped; i++) {
-    if(classesTobeSkipped[i].compare(className.getString()) == 0)
-      return true;
-  }
-  
-  return false;
-}
+bool skipTheFunction(SgName funName);
+bool skipTheClass(SgName className);
 
 /**
    These are class declarations which has to be converted to 
@@ -152,8 +141,6 @@ int main ( int argc, char** argv )
 #endif
 
   std::cout<<"\n\n\n************ START OF TRANSFORMATION *****************\n";
-
-  
   
   outermostScope =  SageInterface::getFirstGlobalScope(project);
   printf("// The Function name is %s \n", fnName);
@@ -405,7 +392,6 @@ bool addToClassDeclarations(SgClassDeclaration* classDec) {
   return true;
 }
 
-std::string the_pragma_skip = "skip 1 ";
 
 void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope) {
 
@@ -849,5 +835,24 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   outFile<<"struct "<<className<<";\n";
   outFile<<"typedef struct "<<className<<" "<<className<<";\n";
   
+}
+
+bool skipTheFunction(SgName funName) {
+  // std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
+  for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
+    if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
+      return true;
+  }
+  return false;
+}
+
+bool skipTheClass(SgName className) {
+  //  std::cout<<"The class to be skipped is "<<className.getString()<<std::endl;
+  for(int i=0; i < sizeofClassesTobeSkipped; i++) {
+    if(classesTobeSkipped[i].compare(className.getString()) == 0)
+      return true;
+  }
+  
+  return false;
 }
 
