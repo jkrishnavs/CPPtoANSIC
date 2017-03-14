@@ -13,8 +13,8 @@ SgName thisName = "this";
 
 
 std::string the_pragma_skip   = "skip 1 ";
-std::string the_pragma_call   = "skip fnCall";
-std::string the_pragma_fnDef  = "skip fnDef"; 
+std::string the_pragma_call   = "skip fnCall ";
+std::string the_pragma_fnDef  = "skip fnDef "; 
 
 
 /**
@@ -76,6 +76,8 @@ struct FunctionClassDetails {
   SgFunctionDeclaration *dec;
   SgClassDeclaration* classSymbol;
   std::vector<SgFunctionCallExp*> callSites;
+
+
   FunctionClassDetails(SgFunctionDeclaration* d, SgFunctionCallExp* e, 
 		       SgClassDeclaration* s) {
     dec = d;
@@ -83,10 +85,14 @@ struct FunctionClassDetails {
     callSites.push_back(e);
     classSymbol = s;
   }
+
+
   SgFunctionDeclaration * getDec() {
     ROSE_ASSERT(dec != NULL);
     return dec;
   }
+
+
   bool found(SgFunctionDeclaration* d) {
     if(dec == d)
       return true;
@@ -119,13 +125,14 @@ void getSuitableFunctionName(FunctionClassDetails* cur,
 			     SgName&  newName);
 SgType* getReturnType(SgFunctionDeclaration* curFn);
 SgFunctionDeclaration * copyFunctionDeclaration(FunctionClassDetails* cur);
-void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope);
-void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, 
+void unparseCPPScopetoCScope( SgBasicBlock *originalScope, SgBasicBlock *newScope);
+void unparseCPPtoCandPrint(FunctionClassDetails *cur,
+			   SgFunctionDefinition * originalFunction, 
 			   SgFunctionDeclaration* newFunctionDeclaration);
 bool addToClassDeclarations(SgClassDeclaration* classDec);
 SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList ) ;
 void unparseClasstoStruct(SgClassDefinition* classDef);
-
+void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicBlock* newBody);
 
 
 
@@ -204,9 +211,12 @@ int main ( int argc, char** argv )
 	fndefinition = func;	
 	FunctionClassDetails* baseDec = new FunctionClassDetails(func, 
 								 NULL, NULL);	
+	// copy main Function
 	SgFunctionDeclaration* newFnDeclaration = 
 	  copyFunctionDeclaration(baseDec);
-	unparseCPPtoCandPrint(defn, newFnDeclaration);
+	
+	
+	unparseCPPtoCandPrint(baseDec, defn, newFnDeclaration);
 	
       }   
     }
@@ -225,7 +235,7 @@ int main ( int argc, char** argv )
     ROSE_ASSERT(body != NULL);
     SgFunctionDeclaration* newFnDeclaration = 
       copyFunctionDeclaration(curPtr);	
-    unparseCPPtoCandPrint(def, newFnDeclaration);
+    unparseCPPtoCandPrint(curPtr, def, newFnDeclaration);
     itr++;
   }
 
@@ -279,16 +289,19 @@ int main ( int argc, char** argv )
    Copy an function into our output file.
  **/
 
-void unparseCPPtoCandPrint(SgFunctionDefinition * originalFunction, SgFunctionDeclaration* newFunctionDeclaration) {
+void unparseCPPtoCandPrint(FunctionClassDetails *cur, SgFunctionDefinition * originalFunction, SgFunctionDeclaration* newFunctionDeclaration) {
   SgBasicBlock *fnBody  = originalFunction->get_body();
   ROSE_ASSERT(fnBody != NULL);
   SgFunctionDefinition *newFnDefinition = newFunctionDeclaration->get_definition();
   SgBasicBlock *newBody  = newFnDefinition->get_body();
   ROSE_ASSERT(newBody != NULL);
   
+  addPargmaforOriginalFunctionDeclaration(cur, newBody);
 
 
   unparseCPPScopetoCScope(fnBody, newBody);
+
+  
   
 
   // Copy the function back to a file.
@@ -309,6 +322,28 @@ void getSuitableFunctionName(FunctionClassDetails* cur, SgName&  newName) {
   //  std::cout<<"The newly created function name is "<<newName<<std::endl;
   return;
 }
+
+void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicBlock* newBody) {
+  SgFunctionDeclaration* curFn = cur->dec;
+  SgClassDeclaration* classSymbol = cur->classSymbol;
+  SgName newName;
+  if(classSymbol != NULL) {
+    newName = 
+      SgName( "class " + classSymbol->get_name()  + " function " +  curFn->get_name());
+  } else {
+    newName = SgName( "function " + curFn->get_name());
+  }
+  std::string pragmaString = the_pragma_fnDef + newName;
+  std::cout<<"the pragma string is "<<pragmaString<<std::endl;
+  // ROSE_ASSERT(outermostScope != NULL);
+  SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newBody);
+  ROSE_ASSERT(pragmaDec!= NULL);
+  //  decFile<<pragmaDec->unparseToCompleteString()<<std::endl;
+  appendStatement(pragmaDec, newBody);
+
+  return;
+}
+
 
 SgType* getReturnType(SgFunctionDeclaration* curFn) {
   // TODO: getReturn type
@@ -355,6 +390,7 @@ SgFunctionDeclaration* copyFunctionDeclaration(FunctionClassDetails* cur) {
   ROSE_ASSERT(paramList != NULL);
   ROSE_ASSERT(parentScope != NULL);
 
+
   
   //  if(baseFunctionDeclaration == NULL) {
   baseFunctionDeclaration = buildNondefiningFunctionDeclaration(functionName, 
@@ -362,6 +398,8 @@ SgFunctionDeclaration* copyFunctionDeclaration(FunctionClassDetails* cur) {
     //}
   ROSE_ASSERT(baseFunctionDeclaration != NULL);
   // TODO if memFn != NULL prepent the struct to the copied list.
+  
+
 
   outFile<<baseFunctionDeclaration->unparseToString()<<std::endl;
   
@@ -782,6 +820,8 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
   }
   return newFunParamsList;
 }
+
+
 
 void unparseClasstoStruct(SgClassDefinition* classDef) {
 
