@@ -13,7 +13,7 @@ SgName thisName = "this";
 
 
 std::string the_pragma_skip   = "skip 1 ";
-std::string the_pragma_call   = "skip fnCall ";
+std::string the_pragma_call   = "replace fnCall ";
 std::string the_pragma_fnDef  = "skip fnDef "; 
 
 
@@ -270,16 +270,11 @@ int main ( int argc, char** argv )
   for (std::string str; std::getline(definitionFile, str); ) {
     outFile << str << std::endl;
   }
-
   outFile.close();
-  //  definitionFile.close();
-  
   ROSE_ASSERT(outermostScope != NULL);
   insertStatementBefore(getFirstStatement(outermostScope),
   			baseFunctionDeclaration);
- 
   isSgStatement(fndefinition->get_parent())->remove_statement(fndefinition); 
-
   return backend(project);
 
 }
@@ -295,15 +290,11 @@ void unparseCPPtoCandPrint(FunctionClassDetails *cur, SgFunctionDefinition * ori
   SgFunctionDefinition *newFnDefinition = newFunctionDeclaration->get_definition();
   SgBasicBlock *newBody  = newFnDefinition->get_body();
   ROSE_ASSERT(newBody != NULL);
-  
+
   addPargmaforOriginalFunctionDeclaration(cur, newBody);
-
-
   unparseCPPScopetoCScope(fnBody, newBody);
 
   
-  
-
   // Copy the function back to a file.
   decFile<<newFunctionDeclaration->unparseToCompleteString()<<std::endl;
   return;
@@ -340,8 +331,14 @@ void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicB
   ROSE_ASSERT(pragmaDec!= NULL);
   //  decFile<<pragmaDec->unparseToCompleteString()<<std::endl;
   appendStatement(pragmaDec, newBody);
-
   return;
+}
+
+void addPragmaforOriginalFunctionCall() {
+  // We are going to assume the funcion calls are going to be 
+  // in the order of appearance in the list.
+
+  
 }
 
 
@@ -746,6 +743,24 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    SgFunctionCallExp* newfunctionCallExpr = 
 	      buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
 				   scopeStmt);
+
+	    SgStatement* parentStatement = getEnclosingStatement(callExpr);
+	    // TODO currently assumes that the call is made only inside 
+	    // TODO if for init state that in pragma call and add it above parent.
+	    SgForInitStatement* forInit = isSgForInitStatement(parentStatement->get_parent());
+	    std::string pragmaStr;
+	    if(forInit != NULL) {
+	      std::cout<<"Inside for init statement.\n";
+	      pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
+	      parentStatement = isSgStatement(forInit->get_parent());
+	      ROSE_ASSERT(parentStatement !=NULL);
+	    } else {
+	      pragmaStr =  the_pragma_call; // + parentStatement->unparseToString();
+	    }
+	      //    if(parentStatement)
+	    ROSE_ASSERT(parentStatement != NULL);
+	    SgPragmaDeclaration* pragmaStatement = buildPragmaDeclaration(pragmaStr, parentStatement->get_scope());
+	    insertStatement(parentStatement, pragmaStatement, true, true);
 	    replaceExpression(callExpr, newfunctionCallExpr);
 	  }
 	} else {
@@ -892,7 +907,6 @@ bool skipTheClass(SgName className) {
     if(classesTobeSkipped[i].compare(className.getString()) == 0)
       return true;
   }
-  
   return false;
 }
 
