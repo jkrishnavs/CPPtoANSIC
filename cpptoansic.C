@@ -325,7 +325,7 @@ void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicB
     newName = SgName( "function " + curFn->get_name());
   }
   std::string pragmaString = the_pragma_fnDef + newName;
-  std::cout<<"the pragma string is "<<pragmaString<<std::endl;
+  // std::cout<<"the pragma string is "<<pragmaString<<std::endl;
   // ROSE_ASSERT(outermostScope != NULL);
   SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newBody);
   ROSE_ASSERT(pragmaDec!= NULL);
@@ -576,7 +576,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     SgNewExp* newCall  = isSgNewExp(*funItr);
     ROSE_ASSERT(newCall != NULL);
     SgStatement* parentStatement =  getEnclosingStatement(newCall);
-    std::cout<<"The original parent statment is"<<parentStatement->unparseToCompleteString()<<std::endl;
+    //  std::cout<<"The original parent statment is"<<parentStatement->unparseToCompleteString()<<std::endl;
     ROSE_ASSERT(parentStatement != NULL);
     std::string originalString  = parentStatement->unparseToCompleteString();
     std::string pragmaString = the_pragma_skip + originalString;
@@ -747,18 +747,58 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    SgStatement* parentStatement = getEnclosingStatement(callExpr);
 	    // TODO currently assumes that the call is made only inside 
 	    // TODO if for init state that in pragma call and add it above parent.
+	    SgForStatement* forStatement = isSgForStatement(parentStatement);
+	    // increament expression
 	    SgForInitStatement* forInit = isSgForInitStatement(parentStatement->get_parent());
 	    std::string pragmaStr;
-	    if(forInit != NULL) {
+	    bool set = false;
+	    if(forStatement != NULL) {
+	      SgTreeCopy expCopyHelp;
+	      SgExpression* newCallExpr  = isSgExpression(callExpr->copy(expCopyHelp));
+	      ROSE_ASSERT(newCallExpr != NULL);
+	      SgExprStatement* expStmt = buildExprStatement(newCallExpr);
+	      ROSE_ASSERT(expStmt != NULL);
+	      expStmt->set_parent(forStatement);
+	      //	      expStmt->set_scope(parentStatement->get_scope());
+	      pragmaStr = the_pragma_call + " increment "   + expStmt->unparseToString();
+	      set = true;
+	    }else if(forInit != NULL && set == false) {
+	      // for init
 	      std::cout<<"Inside for init statement.\n";
 	      pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
 	      parentStatement = isSgStatement(forInit->get_parent());
 	      ROSE_ASSERT(parentStatement !=NULL);
 	    } else {
-	      pragmaStr =  the_pragma_call; // + parentStatement->unparseToString();
+	      SgForStatement* ancestor = isSgForStatement(parentStatement->get_parent());
+	      if(ancestor != NULL) {
+		if(ancestor->get_test() ==  parentStatement ) {
+		  // for test part
+		  pragmaStr = the_pragma_call + "fortest " + parentStatement->unparseToString();
+		  set = true;
+		  parentStatement = isSgStatement(parentStatement->get_parent());
+		}
+	      }
+	      if(set == false)
+		pragmaStr =  the_pragma_call + "normal " + parentStatement->unparseToString();
 	    }
-	      //    if(parentStatement)
 	    ROSE_ASSERT(parentStatement != NULL);
+	    forStatement = isSgForStatement(parentStatement);
+	    if(forStatement != NULL) {
+	      // check if its omp for 
+	      SgStatement * previousStatement = getPreviousStatement (forStatement, false);
+	      SgPragmaDeclaration* pragmaStatement = isSgPragmaDeclaration(previousStatement);
+	      if(pragmaStatement != NULL) {
+		std::cout<<"Previous pragma is "<<pragmaStatement->get_pragma()->get_pragma()<<std::endl;
+		// Check if it is omp pragma
+		std::string pragmaString = pragmaStatement->get_pragma()->get_pragma();
+		if(pragmaString.compare(0,4,"omp ") == 0) {
+		  std::cout<<"Found omp pragma ***\n";
+		  // move above the pragma statement
+		  parentStatement = pragmaStatement;
+		}
+		
+	      }
+	    }
 	    SgPragmaDeclaration* pragmaStatement = buildPragmaDeclaration(pragmaStr, parentStatement->get_scope());
 	    insertStatement(parentStatement, pragmaStatement, true, true);
 	    replaceExpression(callExpr, newfunctionCallExpr);
@@ -909,4 +949,3 @@ bool skipTheClass(SgName className) {
   }
   return false;
 }
-
