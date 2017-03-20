@@ -135,6 +135,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef);
 void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicBlock* newBody);
 
 
+std::vector<SgFunctionDefinition *> deepDeleteList;
 
 int main ( int argc, char** argv )
 {
@@ -219,6 +220,7 @@ int main ( int argc, char** argv )
 	unparseCPPtoCandPrint(baseDec, defn, newFnDeclaration);
 	removeStatement(defn, true);
 	//deepDelete(defn);
+	deepDeleteList.push_back(defn);
       }   
     }
   }
@@ -240,6 +242,7 @@ int main ( int argc, char** argv )
     ROSE_ASSERT(def != NULL);
     removeStatement(def, false);
     //  deepDelete(def);
+    deepDeleteList.push_back(def);
     itr++;
   }
 
@@ -255,6 +258,7 @@ int main ( int argc, char** argv )
   SgFunctionParameterList* paramList = fndefinition->get_parameterList();
   ROSE_ASSERT(paramList != NULL);
   SgInitializedNamePtrList list = paramList->get_args();
+  std::cout<<"The number of argumnets to start function is "<<list.size()<<std::endl;
   SgInitializedNamePtrList::iterator piter = list.begin();
   piter ++;
   argumentList += "gm";
@@ -279,6 +283,14 @@ int main ( int argc, char** argv )
   // insertStatementBefore(getFirstStatement(outermostScope),
   // 			baseFunctionDeclaration);
   // isSgStatement(fndefinition->get_parent())->remove_statement(fndefinition); 
+
+  std::vector<SgFunctionDefinition *>::iterator dItr =  deepDeleteList.begin();
+
+  for(; dItr != deepDeleteList.end(); dItr++) {
+    removeStatement (* dItr, true);
+    //   deepDelete(*dItr);
+  }
+
   return backend(project);
   
 }
@@ -312,7 +324,8 @@ void getSuitableFunctionName(FunctionClassDetails* cur, SgName&  newName) {
     newName = 
       SgName( classSymbol->get_name()  + "_" +  curFn->get_name());
   } else {
-    newName = SgName(curFn->get_name());
+    //added to change the signature of the c function
+    newName = SgName("_" + curFn->get_name());
   }
   //  std::cout<<"The newly created function name is "<<newName<<std::endl;
   return;
@@ -364,13 +377,12 @@ SgFunctionDeclaration* copyFunctionDeclaration(FunctionClassDetails* cur) {
     copyFunctionParameterList(curFn->get_parameterList());  
   // TODO: append the class pointer this to the function parameter 
   // list.
-  
-  SgInitializedName* initName =
-    buildInitializedName (thisName, buildPointerType(buildVoidType()));
-  //(SgType *base_type=NULL)Type());
-  //classSymbol->get_type());  
-  paramList->prepend_arg(initName);
-    
+ 
+  if(classSymbol != NULL) { 
+    SgInitializedName* initName =
+      buildInitializedName (thisName, buildPointerType(buildVoidType()));
+    paramList->prepend_arg(initName);
+  }
   SgType* returnType =  getReturnType(curFn);
   
 
@@ -429,6 +441,82 @@ bool addToClassDeclarations(SgClassDeclaration* classDec) {
   
   classSymbolsUsed.push_back(classDec);
   return true;
+}
+
+void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExpression* objectExpr, bool classCall) {	   
+  if(classCall)
+    ROSE_ASSERT(objectExpr != NULL);
+  SgTreeCopy expCopyHelp;
+  SgExprListExp* expList = callExpr->get_args();
+  SgExprListExp* newExprList = 
+    isSgExprListExp(expList->copy(expCopyHelp));
+  SgExprStatement *newExpStatement = NULL;
+  if(classCall)
+    newExprList->prepend_expression(objectExpr);	    
+  ROSE_ASSERT(newExprList != NULL);
+  SgScopeStatement* scopeStmt = getScope(callExpr);
+  ROSE_ASSERT(scopeStmt != NULL);
+  SgFunctionCallExp* newfunctionCallExpr = 
+    buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
+			 scopeStmt);
+  SgStatement* parentStatement = getEnclosingStatement(callExpr);
+  // TODO currently assumes that the call is made only inside 
+  // TODO if for init state that in pragma call and add it above parent.
+  SgForStatement* forStatement = isSgForStatement(parentStatement);
+  // increament expression
+  SgForInitStatement* forInit = isSgForInitStatement(parentStatement->get_parent());
+  std::string pragmaStr;
+  bool set = false;
+  if(forStatement != NULL) {
+    SgTreeCopy expCopyHelp;
+    SgExpression* newCallExpr  = isSgExpression(callExpr->copy(expCopyHelp));
+    ROSE_ASSERT(newCallExpr != NULL);
+    SgExprStatement* expStmt = buildExprStatement(newCallExpr);
+    ROSE_ASSERT(expStmt != NULL);
+    expStmt->set_parent(forStatement);
+    //	      expStmt->set_scope(parentStatement->get_scope());
+    pragmaStr = the_pragma_call + " increment "   + expStmt->unparseToString();
+    set = true;
+  }else if(forInit != NULL && set == false) {
+    // for init
+    std::cout<<"Inside for init statement.\n";
+    pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
+    parentStatement = isSgStatement(forInit->get_parent());
+    ROSE_ASSERT(parentStatement !=NULL);
+  } else {
+    SgForStatement* ancestor = isSgForStatement(parentStatement->get_parent());
+    if(ancestor != NULL) {
+      if(ancestor->get_test() ==  parentStatement ) {
+	// for test part
+	pragmaStr = the_pragma_call + "fortest " + parentStatement->unparseToString();
+	set = true;
+	parentStatement = isSgStatement(parentStatement->get_parent());
+      }
+    }
+    if(set == false)
+      pragmaStr =  the_pragma_call + "normal " + parentStatement->unparseToString();
+  }
+  ROSE_ASSERT(parentStatement != NULL);
+  forStatement = isSgForStatement(parentStatement);
+  if(forStatement != NULL) {
+    // check if its omp for 
+    SgStatement * previousStatement = getPreviousStatement (forStatement, false);
+    SgPragmaDeclaration* pragmaStatement = isSgPragmaDeclaration(previousStatement);
+    if(pragmaStatement != NULL) {
+      std::cout<<"Previous pragma is "<<pragmaStatement->get_pragma()->get_pragma()<<std::endl;
+      // Check if it is omp pragma
+      std::string pragmaString = pragmaStatement->get_pragma()->get_pragma();
+      if(pragmaString.compare(0,4,"omp ") == 0) {
+	std::cout<<"Found omp pragma ***\n";
+	// move above the pragma statement
+	parentStatement = pragmaStatement;
+      }
+      
+    }
+  }
+  SgPragmaDeclaration* pragmaStatement = buildPragmaDeclaration(pragmaStr, parentStatement->get_scope());
+  insertStatement(parentStatement, pragmaStatement, true, true);
+  replaceExpression(callExpr, newfunctionCallExpr); 
 }
 
 
@@ -731,86 +819,22 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    // 	     << " from original function name "<< fnSymbol->get_name()
 	    // 	     << " and className "<< classDec->get_name()<<std::endl;
 	    
+	    replaceFunctionCall(functionName, callExpr, objectExpr, true); 
 	    
-	    
-	    
-	    SgExprListExp* expList = callExpr->get_args();
-	    SgExprListExp* newExprList = 
-	      isSgExprListExp(expList->copy(expCopyHelp));
-	    SgExprStatement *newExpStatement = NULL;
-	    newExprList->prepend_expression(objectExpr);	    
-	    ROSE_ASSERT(newExprList != NULL);
-	    // SgType * newType = new SgType(*callExpr->get_type());
-	    // ROSE_ASSERT(newType != NULL);
-	    SgScopeStatement* scopeStmt = getScope(callExpr);
-	    ROSE_ASSERT(scopeStmt != NULL);
-	    SgFunctionCallExp* newfunctionCallExpr = 
-	      buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
-				   scopeStmt);
 
-	    SgStatement* parentStatement = getEnclosingStatement(callExpr);
-	    // TODO currently assumes that the call is made only inside 
-	    // TODO if for init state that in pragma call and add it above parent.
-	    SgForStatement* forStatement = isSgForStatement(parentStatement);
-	    // increament expression
-	    SgForInitStatement* forInit = isSgForInitStatement(parentStatement->get_parent());
-	    std::string pragmaStr;
-	    bool set = false;
-	    if(forStatement != NULL) {
-	      SgTreeCopy expCopyHelp;
-	      SgExpression* newCallExpr  = isSgExpression(callExpr->copy(expCopyHelp));
-	      ROSE_ASSERT(newCallExpr != NULL);
-	      SgExprStatement* expStmt = buildExprStatement(newCallExpr);
-	      ROSE_ASSERT(expStmt != NULL);
-	      expStmt->set_parent(forStatement);
-	      //	      expStmt->set_scope(parentStatement->get_scope());
-	      pragmaStr = the_pragma_call + " increment "   + expStmt->unparseToString();
-	      set = true;
-	    }else if(forInit != NULL && set == false) {
-	      // for init
-	      std::cout<<"Inside for init statement.\n";
-	      pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
-	      parentStatement = isSgStatement(forInit->get_parent());
-	      ROSE_ASSERT(parentStatement !=NULL);
-	    } else {
-	      SgForStatement* ancestor = isSgForStatement(parentStatement->get_parent());
-	      if(ancestor != NULL) {
-		if(ancestor->get_test() ==  parentStatement ) {
-		  // for test part
-		  pragmaStr = the_pragma_call + "fortest " + parentStatement->unparseToString();
-		  set = true;
-		  parentStatement = isSgStatement(parentStatement->get_parent());
-		}
-	      }
-	      if(set == false)
-		pragmaStr =  the_pragma_call + "normal " + parentStatement->unparseToString();
-	    }
-	    ROSE_ASSERT(parentStatement != NULL);
-	    forStatement = isSgForStatement(parentStatement);
-	    if(forStatement != NULL) {
-	      // check if its omp for 
-	      SgStatement * previousStatement = getPreviousStatement (forStatement, false);
-	      SgPragmaDeclaration* pragmaStatement = isSgPragmaDeclaration(previousStatement);
-	      if(pragmaStatement != NULL) {
-		std::cout<<"Previous pragma is "<<pragmaStatement->get_pragma()->get_pragma()<<std::endl;
-		// Check if it is omp pragma
-		std::string pragmaString = pragmaStatement->get_pragma()->get_pragma();
-		if(pragmaString.compare(0,4,"omp ") == 0) {
-		  std::cout<<"Found omp pragma ***\n";
-		  // move above the pragma statement
-		  parentStatement = pragmaStatement;
-		}
-		
-	      }
-	    }
-	    SgPragmaDeclaration* pragmaStatement = buildPragmaDeclaration(pragmaStr, parentStatement->get_scope());
-	    insertStatement(parentStatement, pragmaStatement, true, true);
-	    replaceExpression(callExpr, newfunctionCallExpr);
 	  }
 	} else {
-	  SgName funName  = fnDec->get_name();
+	  // non class member function
+	  SgName funName  =  fnDec->get_name();
 	  undefined = skipTheFunction(funName);
+
+	  if(undefined == false) {
+	    // rewrite the function call
+	    SgName newName = "_" + funName;
+	    replaceFunctionCall(newName, callExpr, NULL, false); 
+	  }
 	}
+	
 	
 	
 	/* Add details for copying the referred function codes. 
