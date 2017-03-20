@@ -217,7 +217,8 @@ int main ( int argc, char** argv )
 	
 	
 	unparseCPPtoCandPrint(baseDec, defn, newFnDeclaration);
-	
+	removeStatement(defn, true);
+	//deepDelete(defn);
       }   
     }
   }
@@ -236,6 +237,9 @@ int main ( int argc, char** argv )
     SgFunctionDeclaration* newFnDeclaration = 
       copyFunctionDeclaration(curPtr);	
     unparseCPPtoCandPrint(curPtr, def, newFnDeclaration);
+    ROSE_ASSERT(def != NULL);
+    removeStatement(def, false);
+    //  deepDelete(def);
     itr++;
   }
 
@@ -271,12 +275,12 @@ int main ( int argc, char** argv )
     outFile << str << std::endl;
   }
   outFile.close();
-  ROSE_ASSERT(outermostScope != NULL);
-  insertStatementBefore(getFirstStatement(outermostScope),
-  			baseFunctionDeclaration);
-  isSgStatement(fndefinition->get_parent())->remove_statement(fndefinition); 
+  //  ROSE_ASSERT(outermostScope != NULL);
+  // insertStatementBefore(getFirstStatement(outermostScope),
+  // 			baseFunctionDeclaration);
+  // isSgStatement(fndefinition->get_parent())->remove_statement(fndefinition); 
   return backend(project);
-
+  
 }
 
 
@@ -879,54 +883,53 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
 
 
 void unparseClasstoStruct(SgClassDefinition* classDef) {
-
-
+  
   std::string className = classDef->get_declaration()->get_name();
-  ROSE_ASSERT(!className.empty());
-  std::cout<<"The class unparsed is "<<className<<std::endl;
+  // ROSE_ASSERT(!className.empty());
+  // std::cout<<"The class unparsed is "<<className<<std::endl;
   
-  SgScopeStatement* outerMostScope = classDef->get_scope(); 
-  ROSE_ASSERT(outerMostScope != NULL);
-  SgTemplateInstantiationDefn* tempDefinition = isSgTemplateInstantiationDefn(classDef);
-  SgTemplateClassDefinition* templateDef = isSgTemplateClassDefinition(classDef);
+  // SgScopeStatement* outerMostScope = classDef->get_scope(); 
+  // ROSE_ASSERT(outerMostScope != NULL);
+  // SgTemplateInstantiationDefn* tempDefinition = isSgTemplateInstantiationDefn(classDef);
+  // SgTemplateClassDefinition* templateDef = isSgTemplateClassDefinition(classDef);
   
-  SgClassDeclaration* definingDec = isSgClassDeclaration(classDef->get_declaration()->get_declaration_associated_with_symbol()->get_definingDeclaration());
+  // SgClassDeclaration* definingDec = isSgClassDeclaration(classDef->get_declaration()->get_declaration_associated_with_symbol()->get_definingDeclaration());
   
-  ROSE_ASSERT(definingDec != NULL);
-  //std::cout<<"The class data is \n"<<definingDec->unparseToCompleteString()<<std::endl;
+  // ROSE_ASSERT(definingDec != NULL);
+  // //std::cout<<"The class data is \n"<<definingDec->unparseToCompleteString()<<std::endl;
   
-  if(tempDefinition != NULL || templateDef != NULL)
-    return;
+  // if(tempDefinition != NULL || templateDef != NULL)
+  //   return;
 
-  SgDeclarationStatementPtrList  decStatements = classDef->get_members();
-  if(decStatements.size() == 0)
-    return;
+  // SgDeclarationStatementPtrList  decStatements = classDef->get_members();
+  // if(decStatements.size() == 0)
+  //   return;
 
-  SgClassDeclaration* classtoStructDecl = NULL;
-  classtoStructDecl = buildStructDeclaration(className, outermostScope);
-  ROSE_ASSERT(classtoStructDecl!= NULL);
+  // SgClassDeclaration* classtoStructDecl = NULL;
+  // // classtoStructDecl = buildStructDeclaration(className, outermostScope);
+  // ROSE_ASSERT(classtoStructDecl!= NULL);
   
 
-  SgClassDefinition *structDef = classtoStructDecl->get_definition();
-  ROSE_ASSERT(structDef != NULL);
-  SgScopeStatement* structDefScope = isSgScopeStatement(structDef);
-  ROSE_ASSERT(structDefScope!= NULL);
+  // SgClassDefinition *structDef = classtoStructDecl->get_definition();
+  // ROSE_ASSERT(structDef != NULL);
+  // SgScopeStatement* structDefScope = isSgScopeStatement(structDef);
+  // ROSE_ASSERT(structDefScope!= NULL);
 
 
   
-  SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
-  SgStatement* newStatement = NULL; 
-  for(; itr != decStatements.end(); ++itr) {
-    SgDeclarationStatement* newDec = *(itr);
-    // std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
-    SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
-    if(varDec != NULL) {
-      newStatement = copyStatement(varDec);
-      ROSE_ASSERT(newStatement != NULL);
-      appendStatement(newStatement, structDefScope);
-    }
-  }
-  decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;
+  // SgDeclarationStatementPtrList::iterator itr = decStatements.begin();
+  // SgStatement* newStatement = NULL; 
+  // for(; itr != decStatements.end(); ++itr) {
+  //   SgDeclarationStatement* newDec = *(itr);
+  //   // std::cout<<"the declaration to be added is "<<newDec->unparseToCompleteString()<<std::endl;
+  //   SgVariableDeclaration* varDec =  isSgVariableDeclaration(newDec);
+  //   if(varDec != NULL) {
+  //     newStatement = copyStatement(varDec);
+  //     ROSE_ASSERT(newStatement != NULL);
+  //     //      appendStatement(newStatement, structDefScope);
+  //   }
+  // }
+  // decFile<<classtoStructDecl->unparseToCompleteString()<<std::endl;
   outFile<<"struct "<<className<<";\n";
   outFile<<"typedef struct "<<className<<" "<<className<<";\n";
   
