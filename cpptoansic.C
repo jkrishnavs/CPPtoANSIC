@@ -656,7 +656,19 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     
 
     std::string originalString  = varDec->unparseToCompleteString();
-    // if the 
+   
+    if(originalString.find("\n", 0) != std::string::npos) {
+      // if the start of the statement is # or // then we need to skip till last \n.
+      std::string::size_type prev = 0;
+      std::string str = originalString; 
+      while(str.find("\n", prev) != std::string::npos) {
+	std::string::size_type pos = str.find("\n", prev);
+	prev = pos + 1;
+      } 
+      //      originalString = " garbage skip " + str.substr(prev);
+      originalString = " garbage skip " + str.substr(prev);
+    }
+ 
     std::string pragmaString = the_pragma_skip + originalString;
     SgName varName = varDef->get_vardefn()->get_qualified_name();
 
