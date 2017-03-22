@@ -29,7 +29,16 @@ std::string classesTobeSkipped[] =
    "_gm_sort_indices < node_t > ", 
    "_Iter_base < pointer , false > ", 
    "__normal_iterator < pointer , vector< edge_dest_t , allocator< edge_dest_t > > > ",
-  "__copy_move_backward < true , true , iterator_category > "};
+   "__copy_move_backward < true , true , iterator_category > ",
+   "list < void * , allocator< void * > > ",
+   "_List_iterator < void * > ",
+   "list < gm_complex_data_type * , allocator< gm_complex_data_type * > > ",
+   "_List_iterator < gm_complex_data_type * > ",
+   "gm_map_medium < node_t , int32_t > ",
+   "gm_map_medium < node_t , int32_t >  gm_map_medium < node_t , int32_t > ",
+   "gm_dfs_template< false , true , true , false >  ",
+   
+};
 
 std::string functionsTobeSkipped[] = 
   {
@@ -58,11 +67,36 @@ std::string functionsTobeSkipped[] =
     "__copy_move_backward_a < true , iterator_type , iterator_type >",
     "__niter_base < pointer >",
     "__push_heap < int32_t * , difference_type , type , _gm_sort_indices< node_t > >",
-    "log < int > "
+    "log < int > ",
+    "changeValueAtomicAdd",
+    "hasMaxValue_seq",
+    "getMaxKey_seq",
+    "prepare_seq_iteration",
+    "has_next",
+    "get_next",
+    "ATOMIC_ADD < int32_t > ",
+    "ATOMIC_ADD < int64_t > ",
+    "ATOMIC_ADD < double > ",
+    "Seq_Iterator < iterator , node_t > _has_next",
+    "Seq_Iterator < iterator , node_t > _get_next",
+    "gm_seq_vec < node_t > _prepare_seq_iteration",
+    "_List_iterator < void * > _operator!=",
+    "_List_iterator < void * > _operator++",
+    "_List_iterator < void * > _operator*",
+    "list < void * , allocator< void * > > _clear",
+    "list < gm_complex_data_type * , allocator< gm_complex_data_type * > > _begin",
+    "_List_iterator < gm_complex_data_type * > _operator!=",
+    "_List_iterator < gm_complex_data_type * > _operator++",
+    "_List_iterator < gm_complex_data_type * > _operator*",
+    "list < gm_complex_data_type * , allocator< gm_complex_data_type * > > _clear",
+    "gm_map_medium < node_t , int32_t > _changeValueAtomicAdd",
+    "gm_map_medium < node_t , int32_t > _hasMaxValue_seq",
+    "gm_map_medium < node_t , int32_t > _getMaxKey_seq",
+    "_gm_get_min < int32_t >"
   };
 
-int sizeofClassesTobeSkipped = 8;
-int sizeofFunctionsTobeSkipped = 26;
+int sizeofClassesTobeSkipped = 14;
+int sizeofFunctionsTobeSkipped = 51;
 
 
 bool skipTheFunction(SgName funName);
@@ -164,7 +198,11 @@ int main ( int argc, char** argv )
 	 <<"\ntypedef int32_t node_t; \ntypedef int32_t edge_id; \ntypedef int32_t node_id;"
 	 <<"\ntypedef int32_t edge_t; \nstruct vector; \ntypedef struct vector vector; "
 	 <<"\nstruct iterator; \ntypedef struct iterator iterator; \ntypedef size_t size_type;"
-	 <<"\n#define NIL_NODE (node_t - 1)\n";
+	 <<"\n#define NIL_NODE (node_t - 1)\n"
+	 <<"\ntypedef volatile int32_t gm_spinlock_t;\n"
+	 <<"\ntypedef int * uintptr_t;\n"
+	 <<"\ntypedef unsigned int uint32_t;\n"
+	 <<"\ntypedef long long int64_t;\n";
 #endif
 
   SgFilePtrList & ptr_list = project->get_fileList();
@@ -536,6 +574,8 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
        appendStatement(newStatement, newScope);
   }
 
+  
+
   Rose_STL_Container<SgNode*> classObjects =
     NodeQuery::querySubTree(newScope,  V_SgVariableDeclaration);
 
@@ -616,6 +656,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     
 
     std::string originalString  = varDec->unparseToCompleteString();
+    // if the 
     std::string pragmaString = the_pragma_skip + originalString;
     SgName varName = varDef->get_vardefn()->get_qualified_name();
 
@@ -695,6 +736,36 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
   }
 
   /**
+     change delete Expression.
+   **/ 
+
+  
+  Rose_STL_Container<SgNode*> delList =
+    NodeQuery::querySubTree(newScope, V_SgDeleteExp);
+  
+
+  funItr = delList.begin();
+  for (; funItr != delList.end(); funItr++) {
+    SgDeleteExp* delCall  = isSgDeleteExp(*funItr);
+    ROSE_ASSERT(delCall != NULL);
+    SgStatement* parentStatement =  getEnclosingStatement(delCall);
+    ROSE_ASSERT(parentStatement != NULL);
+    std::string originalString  = parentStatement->unparseToCompleteString();
+    std::string pragmaString = the_pragma_skip + originalString;
+    SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+    ROSE_ASSERT(pragmaDec != NULL);
+    SgExpression* deleteValue = delCall->get_variable ();
+    SgExpression* newRhs = buildNullptrValExp();
+    ROSE_ASSERT(newRhs != NULL);
+    SgAssignOp* newAssignOp = buildAssignOp(deleteValue, newRhs);
+    SgExprStatement* newStatement = buildExprStatement(newAssignOp);
+    ROSE_ASSERT(newStatement != NULL);
+    insertStatement(parentStatement, pragmaDec, true, true);
+    replaceStatement(parentStatement, newStatement, false);
+  }
+
+
+  /**
      Collect all  function calls made
    **/
 
@@ -711,23 +782,42 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       
       SgFunctionDeclaration*  fnDec = 
 	callExpr-> getAssociatedFunctionDeclaration();
+
+      
       
       SgDeclarationStatement* defDec = fnDec->get_definingDeclaration();
       SgFunctionSymbol* fnSymbol = 
 	callExpr->getAssociatedFunctionSymbol();
       SgMemberFunctionSymbol* memFunction = 
-	isSgMemberFunctionSymbol(fnSymbol);	
+	isSgMemberFunctionSymbol(fnSymbol);
+      if(fnSymbol->get_name().getString().compare("gettimeofday") == 0) {
+	// get time of day change the second argumnet to NULL. 
+	//	std::cout<<"The called function name is FOUND "<<fnSymbol->get_name()<<std::endl;
+	//	SgTreeCopy expCopyHelp;
+	SgExprListExp* expList = callExpr->get_args();
+	//	SgExprListExp* newExprList = 
+	//  isSgExprListExp(expList->copy(expCopyHelp));
+	SgNullptrValExp* nullExpression = buildNullptrValExp();
+	//	newExprList->append_expression(nullExpression);
+	SgExpressionPtrList& ptrList = expList->get_expressions();
+	SgExpressionPtrList::iterator listItr = ptrList.begin();
+	listItr++;
+	SgExpression* oldExp = *listItr;
+	replaceExpression (oldExp, nullExpression, false);
+      }
       SgClassDeclaration* classDec = NULL;
       SgTreeCopy expCopyHelp;
       
       //      std::cout<<"Call Expr "<<get_name(callExpr)<<std::endl;
+
+      
+
 
       SgClassDeclaration* classDeclaration;
 
       bool undefined = false;
       if(defDec != NULL) {
 	ROSE_ASSERT(fnSymbol != NULL);
-	//	std::cout<<"The called function name is "<<fnSymbol->get_name()<<std::endl;
 	if(memFunction != NULL) {
 	  /**
 	     What we have is a class member function.
@@ -960,7 +1050,7 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
 }
 
 bool skipTheFunction(SgName funName) {
-  // std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
+  std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
   for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
     if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
       return true;
