@@ -37,6 +37,7 @@ std::string classesTobeSkipped[] =
    "gm_map_medium < node_t , int32_t > ",
    "gm_map_medium < node_t , int32_t >  gm_map_medium < node_t , int32_t > ",
    "gm_dfs_template< false , true , true , false >  ",
+   "gm_dfs_template< false , true , true , false > "
    
 };
 
@@ -76,7 +77,7 @@ std::string functionsTobeSkipped[] =
     "get_next",
     "ATOMIC_ADD < int32_t > ",
     "ATOMIC_ADD < int64_t > ",
-    "ATOMIC_ADD < double > ",
+    "ATOMIC_ADD< float  > ",
     "Seq_Iterator < iterator , node_t > _has_next",
     "Seq_Iterator < iterator , node_t > _get_next",
     "gm_seq_vec < node_t > _prepare_seq_iteration",
@@ -95,7 +96,7 @@ std::string functionsTobeSkipped[] =
     "_gm_get_min < int32_t >"
   };
 
-int sizeofClassesTobeSkipped = 14;
+int sizeofClassesTobeSkipped = 16;
 int sizeofFunctionsTobeSkipped = 51;
 
 
@@ -201,6 +202,7 @@ int main ( int argc, char** argv )
 	 <<"\n#define NIL_NODE (node_t - 1)\n"
 	 <<"\ntypedef volatile int32_t gm_spinlock_t;\n"
 	 <<"\ntypedef int * uintptr_t;\n"
+	 <<"\ntypedef int* seq_iter;\n"
 	 <<"\ntypedef unsigned int uint32_t;\n"
 	 <<"\ntypedef long long int64_t;\n";
 #endif
@@ -645,28 +647,37 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 
     Rose_STL_Container<SgNode*> newList =
     NodeQuery::querySubTree(varDec, V_SgNewExp);
-
-
     Rose_STL_Container<SgNode*>::iterator funItr = newList.begin();
     for (; funItr != newList.end(); funItr++) {
       SgNewExp* newCall  = isSgNewExp(*funItr);
       if(newCall != NULL)
 	newExpr = newCall;
     }
+
+
+    SgConstructorInitializer* constructor = NULL;
+    Rose_STL_Container<SgNode*> constructorList =
+    NodeQuery::querySubTree(varDec, V_SgConstructorInitializer);
+    Rose_STL_Container<SgNode*>::iterator constItr = constructorList.begin();
+    for (; constItr != constructorList.end(); constItr++) {
+      constructor = isSgConstructorInitializer(*constItr);
+    }
     
 
     std::string originalString  = varDec->unparseToCompleteString();
    
     if(originalString.find("\n", 0) != std::string::npos) {
+
+      std::cout<<"Multiple lines "<<originalString<<std::endl;
       // if the start of the statement is # or // then we need to skip till last \n.
       std::string::size_type prev = 0;
       std::string str = originalString; 
       while(str.find("\n", prev) != std::string::npos) {
 	std::string::size_type pos = str.find("\n", prev);
 	prev = pos + 1;
-      } 
+      }
       //      originalString = " garbage skip " + str.substr(prev);
-      originalString = " garbage skip " + str.substr(prev);
+      originalString = str.substr(prev);
     }
  
     std::string pragmaString = the_pragma_skip + originalString;
@@ -675,6 +686,8 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     if(classType == NULL && newExpr != NULL) {
       SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
       ROSE_ASSERT(pragmaDec != NULL);
+      // std::cout<<" null not null "<<varName<<std::endl;
+ 
       // TODO add malloc expression here
       SgInitializer* mallocInitializer = NULL;
       SgVariableDeclaration* newVarDec = buildVariableDeclaration(varName, declarationType, mallocInitializer, newScope);
@@ -685,6 +698,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       SgName className = classType->get_name();
       SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
       ROSE_ASSERT(pragmaDec != NULL);
+      //  std::cout<<" not null null "<<varName<<std::endl;
       //TODO create a proper struct type instead  of using voidPtrType
       //TODO copy the initializer sageInterface::getInitializerOfExpression (SgExpression *n)
       SgInitializer* defaultInitializer = NULL; 
@@ -698,8 +712,17 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       ROSE_ASSERT(pragmaDec != NULL);
       //TODO create a proper struct type instead  of using voidPtrType
       //TODO add  malloc expression here
+
+      //      std::cout<<" not nul not null "<<varName<<std::endl;
       SgInitializer* mallocInitializer = NULL; 
       SgVariableDeclaration* newVarDec = buildVariableDeclaration (varName, voidPtrType, mallocInitializer, newScope);
+      ROSE_ASSERT(newVarDec != NULL);
+      insertStatement(varDec, pragmaDec, true, true);
+      replaceStatement(varDec, newVarDec, false);
+    } else if (constructor != NULL) {
+      SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
+      ROSE_ASSERT(pragmaDec != NULL);
+      SgVariableDeclaration* newVarDec = buildVariableDeclaration (varName, voidPtrType, NULL, newScope);
       ROSE_ASSERT(newVarDec != NULL);
       insertStatement(varDec, pragmaDec, true, true);
       replaceStatement(varDec, newVarDec, false);
