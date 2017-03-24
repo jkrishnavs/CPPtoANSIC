@@ -17,6 +17,7 @@ std::string the_pragma_call   = "replace fnCall ";
 std::string the_pragma_fnDef  = "skip fnDef "; 
 
 
+
 /**
    This vector will contain the names of 
    some system defined functions which can be skipped so as to reduce the complexity of analysis.
@@ -77,7 +78,8 @@ std::string functionsTobeSkipped[] =
     "get_next",
     "ATOMIC_ADD < int32_t > ",
     "ATOMIC_ADD < int64_t > ",
-    "ATOMIC_ADD< float  > ",
+    "ATOMIC_ADD < float > ",
+    "ATOMIC_ADD < float  > ",
     "Seq_Iterator < iterator , node_t > _has_next",
     "Seq_Iterator < iterator , node_t > _get_next",
     "gm_seq_vec < node_t > _prepare_seq_iteration",
@@ -93,11 +95,12 @@ std::string functionsTobeSkipped[] =
     "gm_map_medium < node_t , int32_t > _changeValueAtomicAdd",
     "gm_map_medium < node_t , int32_t > _hasMaxValue_seq",
     "gm_map_medium < node_t , int32_t > _getMaxKey_seq",
-    "_gm_get_min < int32_t >"
+    "_gm_get_min < int32_t >",
+    "ATOMIC_ADD < float > "
   };
 
 int sizeofClassesTobeSkipped = 16;
-int sizeofFunctionsTobeSkipped = 51;
+int sizeofFunctionsTobeSkipped = 53;
 
 
 bool skipTheFunction(SgName funName);
@@ -168,6 +171,7 @@ bool addToClassDeclarations(SgClassDeclaration* classDec);
 SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* origList ) ;
 void unparseClasstoStruct(SgClassDefinition* classDef);
 void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicBlock* newBody);
+bool skipatomicop(SgName funName);
 
 
 std::vector<SgFunctionDefinition *> deepDeleteList;
@@ -298,7 +302,7 @@ int main ( int argc, char** argv )
   SgFunctionParameterList* paramList = fndefinition->get_parameterList();
   ROSE_ASSERT(paramList != NULL);
   SgInitializedNamePtrList list = paramList->get_args();
-  std::cout<<"The number of argumnets to start function is "<<list.size()<<std::endl;
+  //  std::cout<<"The number of argumnets to start function is "<<list.size()<<std::endl;
   SgInitializedNamePtrList::iterator piter = list.begin();
   piter ++;
   argumentList += "gm";
@@ -483,6 +487,8 @@ bool addToClassDeclarations(SgClassDeclaration* classDec) {
   return true;
 }
 
+SgName __unknownFunction = "unknownFunction";
+
 void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExpression* objectExpr, bool classCall) {	   
   if(classCall)
     ROSE_ASSERT(objectExpr != NULL);
@@ -519,7 +525,7 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
     set = true;
   }else if(forInit != NULL && set == false) {
     // for init
-    std::cout<<"Inside for init statement.\n";
+    //   std::cout<<"Inside for init statement.\n";
     pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
     parentStatement = isSgStatement(forInit->get_parent());
     ROSE_ASSERT(parentStatement !=NULL);
@@ -543,11 +549,11 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
     SgStatement * previousStatement = getPreviousStatement (forStatement, false);
     SgPragmaDeclaration* pragmaStatement = isSgPragmaDeclaration(previousStatement);
     if(pragmaStatement != NULL) {
-      std::cout<<"Previous pragma is "<<pragmaStatement->get_pragma()->get_pragma()<<std::endl;
+      // std::cout<<"Previous pragma is "<<pragmaStatement->get_pragma()->get_pragma()<<std::endl;
       // Check if it is omp pragma
       std::string pragmaString = pragmaStatement->get_pragma()->get_pragma();
       if(pragmaString.compare(0,4,"omp ") == 0) {
-	std::cout<<"Found omp pragma ***\n";
+	//std::cout<<"Found omp pragma ***\n";
 	// move above the pragma statement
 	parentStatement = pragmaStatement;
       }
@@ -668,7 +674,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
    
     if(originalString.find("\n", 0) != std::string::npos) {
 
-      std::cout<<"Multiple lines "<<originalString<<std::endl;
+      //      std::cout<<"Multiple lines "<<originalString<<std::endl;
       // if the start of the statement is # or // then we need to skip till last \n.
       std::string::size_type prev = 0;
       std::string str = originalString; 
@@ -868,18 +874,28 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  SgExpression* object = NULL;
 	  SgExpression* objectExpr = NULL;
 	  if(dotExpr != NULL) {
-	    
+	    //	    std::cout<<"The statement under consideration is  "
+	    //	     <<getEnclosingStatement(dotExpr)->unparseToCompleteString()
+	    //	     <<std::endl;
 	    object = dotExpr->get_lhs_operand();
 	    ROSE_ASSERT(object != NULL);
 	    ROSE_ASSERT(object != NULL);
 	    SgVarRefExp* refExpr = isSgVarRefExp(object);
-	    if(refExpr == NULL){
+	    SgCastExp* castExp = isSgCastExp(object);
+	    if(refExpr == NULL && castExp == NULL){
 	      // this means standard library function calls
+	      // if template then 
+	      
 	      undefined = true;
-	    } else {
+	    } else if(castExp == NULL){
 	      objectExpr = 
 		isSgExpression(refExpr->copy(expCopyHelp));
+	    } else {
+	      // skip and then undefined 
+	      replaceFunctionCall(__unknownFunction, callExpr, NULL, false); 
+	      undefined  =true;
 	    }
+	    
 	  } else if(arrowExpr != NULL) {
 	    	    
 	    object = arrowExpr->get_lhs_operand();
@@ -926,7 +942,16 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    
 	    SgName functionName = 
 	      classDec->get_name() + "_" +  fnSymbol->get_name();
-	    undefined = skipTheFunction(functionName);
+	    bool skipfunction = skipTheFunction(functionName);
+	    
+	    if(skipfunction) {
+	      std::cout<<" function name to unkewnn"<<functionName<<std::endl;
+	      replaceFunctionCall(__unknownFunction, callExpr, NULL, false); 
+	    }
+
+	    if(skipfunction)
+	      undefined = true;
+
 	  }
 
 	  
@@ -952,7 +977,12 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  // non class member function
 	  SgName funName  =  fnDec->get_name();
 	  undefined = skipTheFunction(funName);
-
+	  bool skip = skipatomicop(funName);
+	  if(skip) {
+	    std::cout<<" function name to unkewnn"<<funName<<std::endl;
+	    replaceFunctionCall(__unknownFunction, callExpr, NULL, false); 
+	    undefined = true;
+	  }
 	  if(undefined == false) {
 	    // rewrite the function call
 	    SgName newName = "_" + funName;
@@ -1084,8 +1114,16 @@ void unparseClasstoStruct(SgClassDefinition* classDef) {
   
 }
 
+bool skipatomicop(SgName funName) {
+  if(funName.getString().compare("ATOMIC_ADD < float > ") == 0 ){
+        std::cout<<"The function to be skipped is "<<funName.getString()<<"|"<<std::endl;
+      std::cout<<"SKIPPEDD   D"<<std::endl;
+    return true;
+  } 
+  return false;
+}
+
 bool skipTheFunction(SgName funName) {
-  std::cout<<"The function to be skipped is "<<funName.getString()<<std::endl;
   for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
     if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
       return true;
