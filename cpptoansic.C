@@ -14,6 +14,7 @@ SgName thisName = "this";
 
 std::string the_pragma_skip   = "skip 1 ";
 std::string the_pragma_call   = "replace fnCall ";
+std::string the_pragma_fnSign = "Fnsignature ";
 std::string the_pragma_fnDef  = "skip fnDef "; 
 
 
@@ -175,10 +176,10 @@ bool skipatomicop(SgName funName);
 
 
 std::vector<SgFunctionDefinition *> deepDeleteList;
-
+SgScopeStatement * dummyScope;
 int main ( int argc, char** argv )
 {
-
+  dummyScope = NULL;
 #ifdef GREENMARL_CONVERSION
   char* fnName = argv[argc-1];
   SgProject* project = frontend(argc-1,argv);
@@ -186,7 +187,8 @@ int main ( int argc, char** argv )
   char* fnName = "main";
   SgProject* project = frontend(argc,argv);
 #endif
-
+  //  dummyScope = buildScopeStatement(NULL);
+  //ROSE_ASSERT(dummyScope != NULL);
   std::cout<<"\n\n\n************ START OF TRANSFORMATION *****************\n";
   
   outermostScope =  SageInterface::getFirstGlobalScope(project);
@@ -304,6 +306,7 @@ int main ( int argc, char** argv )
   SgInitializedNamePtrList list = paramList->get_args();
   //  std::cout<<"The number of argumnets to start function is "<<list.size()<<std::endl;
   SgInitializedNamePtrList::iterator piter = list.begin();
+  // skip gm_graph
   piter ++;
   argumentList += "gm";
   for(;piter != list.end();piter ++) {
@@ -377,6 +380,9 @@ void getSuitableFunctionName(FunctionClassDetails* cur, SgName&  newName) {
 
 void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicBlock* newBody) {
   SgFunctionDeclaration* curFn = cur->dec;
+  
+  
+  
   SgClassDeclaration* classSymbol = cur->classSymbol;
   SgName newName;
   if(classSymbol != NULL) {
@@ -392,6 +398,35 @@ void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicB
   ROSE_ASSERT(pragmaDec!= NULL);
   //  decFile<<pragmaDec->unparseToCompleteString()<<std::endl;
   appendStatement(pragmaDec, newBody);
+
+  
+  SgTreeCopy expCopyHelp;
+
+  SgFunctionDeclaration * baseFunctionDeclaration = 
+    buildNondefiningFunctionDeclaration(curFn->get_name(), 
+					curFn->get_orig_return_type(), 
+					curFn->get_parameterList(), 
+					newBody);
+  ROSE_ASSERT(baseFunctionDeclaration != NULL);
+
+  /*
+  SgFunctionDefinition* copyDef  = isSgFunctionDefinition(curFn->get_definition()->copy(expCopyHelp));
+  ROSE_ASSERT(copyDef != NULL);
+  copyDef->set_parent(newBody);
+  //SgScopeStatement* scope = copyDef->get_scope();
+  ROSE_ASSERT(scope != NULL);
+  //  ROSE_ASSERT(dummyScope !=NULL);
+  //copyDef->set_scope(dummyScope);
+  SgBasicBlock* basicBlock = buildBasicBlock();
+  ROSE_ASSERT(basicBlock != NULL);
+  basicBlock->set_parent(copyDef);
+  copyDef->set_body(basicBlock); */
+  std::string decString = baseFunctionDeclaration->unparseToString();
+  std::cout<<"The functionDefinition is "<<decString<<std::endl;
+  std::string pragmaSigString = the_pragma_fnSign + decString;
+  SgPragmaDeclaration* pragmaSignature = buildPragmaDeclaration(pragmaSigString, newBody);
+  ROSE_ASSERT(pragmaSignature != NULL);
+  appendStatement(pragmaSignature, newBody);
   return;
 }
 
@@ -1125,8 +1160,10 @@ bool skipatomicop(SgName funName) {
 
 bool skipTheFunction(SgName funName) {
   for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
-    if(functionsTobeSkipped[i].compare(funName.getString()) == 0)
+    if(functionsTobeSkipped[i].compare(funName.getString()) == 0) {
+      std::cout<<"The function skipped is "<<funName.getString()<<std::endl;
       return true;
+    }
   }
   return false;
 }
@@ -1134,8 +1171,9 @@ bool skipTheFunction(SgName funName) {
 bool skipTheClass(SgName className) {
   //  std::cout<<"The class to be skipped is "<<className.getString()<<std::endl;
   for(int i=0; i < sizeofClassesTobeSkipped; i++) {
-    if(classesTobeSkipped[i].compare(className.getString()) == 0)
+    if(classesTobeSkipped[i].compare(className.getString()) == 0) {
       return true;
+    }
   }
   return false;
 }
