@@ -316,7 +316,7 @@ int main ( int argc, char** argv )
   
   outFile<<"\n\n int main() {\n" 
 	 <<"   gm_graph gm;\n  "
-         << fnName << argumentList <<";"
+         << "_"<<fnName << argumentList <<";"
 	 <<" \n  return 0; \n\n }";
 #endif
   decFile.close();  
