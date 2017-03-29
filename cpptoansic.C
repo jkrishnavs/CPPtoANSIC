@@ -233,8 +233,12 @@ int main ( int argc, char** argv )
       SgForStatement* loop = isSgForStatement(*forItr);
       ROSE_ASSERT(loop != NULL);
       normalizeForLoopInitDeclaration (loop);
-      
-      //      std::cout<<loop->unparseToCompleteString()<<std::endl;
+      SgStatement* loopBody = getLoopBody(loop);
+      SgBasicBlock * basicBlock = isSgBasicBlock(loopBody);
+      if(basicBlock == NULL) {
+	basicBlock = buildBasicBlock (loopBody);
+	setLoopBody(loop, basicBlock);
+      }
     }
 
 
