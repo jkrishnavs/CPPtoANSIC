@@ -566,12 +566,13 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
   bool set = false;
   if(forStatement != NULL) {
     SgTreeCopy expCopyHelp;
-    SgExpression* newCallExpr  = isSgExpression(callExpr->copy(expCopyHelp));
+    
+    SgExpression* incExp = forStatement->get_increment();
+    SgExpression* newCallExpr  = isSgExpression(incExp->copy(expCopyHelp));
     ROSE_ASSERT(newCallExpr != NULL);
     SgExprStatement* expStmt = buildExprStatement(newCallExpr);
     ROSE_ASSERT(expStmt != NULL);
     expStmt->set_parent(forStatement);
-    //	      expStmt->set_scope(parentStatement->get_scope());
     pragmaStr = the_pragma_call + " increment "   + expStmt->unparseToString();
     set = true;
   }else if(forInit != NULL && set == false) {
@@ -747,13 +748,12 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       info->set_useTypeAttributes ();
       info->unset_supressStrippedTypeName ();
       info->set_cxx11_initialization_list ();
-      
-      originalString.erase(originalString.find("/*"), 2);
-      originalString.erase(originalString.find("*/")-1,  4);
-      //      originalString.erase(originalString.find("/*") + 2);
-      
-      std::cout<<" the declaration "<<originalString <<std::endl;
-      
+
+      if(originalString.find("/*") != std::string::npos ) {      
+	  originalString.erase(originalString.find("/*"), 2);
+	  originalString.erase(originalString.find("*/")-1,  4);
+	  std::cout<<" the declaration "<<originalString <<std::endl;
+	}
       //std::cout<<varDec->get_baseTypeDefiningDeclaration ()->unparseToCompleteString()<<std::endl;
     }
    
