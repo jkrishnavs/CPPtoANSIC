@@ -14,3 +14,20 @@ where $1 is your cpp file name and $2 is your start function.
 if not using greemarl translator skip $2.
 
 for Queries mail jkrishnavs@gmail.com
+
+
+ROSE changes :
+src/frontend/SageIII/sageInterface/sageInterface.C
+
+in Function : SageInterface::normalizeForLoopInitDeclaration
+
+-   prependStatement(ndecl, funcBody);
++  SgStatement* stmt = loop;
++  SgStatement *prev = getPreviousStatement (stmt, false);
++  if(prev != NULL) {
++    SgPragmaDeclaration* pragmaStmt = isSgPragmaDeclaration(prev);
++    if(pragmaStmt != NULL) 
++      stmt = pragmaStmt;
++  }
++
++  insertStatementBefore (stmt, ndecl, true);

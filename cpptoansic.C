@@ -201,7 +201,19 @@ int main ( int argc, char** argv )
   outFile.open(filename.c_str());
 
 #ifdef GREENMARL_CONVERSION
-  outFile<<"#include<stdio.h> \ntypedef signed int int32_t; \ntypedef int32_t edge_t;"
+  outFile<<"#include<stdio.h> \n";
+  // add all .h file in output files as well.
+  outFile<<"#pragma globalCodeStart \n#include <assert.h>\n#include <stdlib.h>\n#include <string.h>\n"
+	 <<"#include <arpa/inet.h>\n#include <iostream>\n#include <fstream>\n"
+	 <<"#include <string>\n#include <string.h>\n#include <sstream>\n"
+	 <<"#include <map>\n#include <set>\n#include <vector>\n#include <algorithm>\n"
+	 <<"#include <sys/time.h>\n#include <sys/types.h>\n#include <sys/stat.h>\n"
+	 <<"#include <unistd.h>\n#include \"gm_mem_helper.h\"\n#include \"gm_graph.h\"\n"
+	 <<"#include \"gm_util.h\"\n#include \"gm_lock.h\"\n#include \"gm_file_handling.h\"\n"
+	 <<"#include \"common_main.h\"\n#include \"gm_common_neighbor_iter.h\"\n"
+	 <<"#include \"gm_runtime.h\"\n#include \"gm_lock.h\"\n#include \"energylib.h\"\n"
+	 <<"#pragma globalCodeEnd";
+  outFile<<"\ntypedef signed int int32_t; \ntypedef int32_t edge_t;"
 	 <<"\ntypedef int32_t node_t; \ntypedef int32_t edge_id; \ntypedef int32_t node_id;"
 	 <<"\ntypedef int32_t edge_t; \nstruct vector; \ntypedef struct vector vector; "
 	 <<"\nstruct iterator; \ntypedef struct iterator iterator; \ntypedef size_t size_type;"
@@ -426,7 +438,7 @@ void addPargmaforOriginalFunctionDeclaration(FunctionClassDetails *cur, SgBasicB
   basicBlock->set_parent(copyDef);
   copyDef->set_body(basicBlock); */
   std::string decString = baseFunctionDeclaration->unparseToString();
-  std::cout<<"The functionDefinition is "<<decString<<std::endl;
+  //std::cout<<"The functionDefinition is "<<decString<<std::endl;
   std::string pragmaSigString = the_pragma_fnSign + decString;
   SgPragmaDeclaration* pragmaSignature = buildPragmaDeclaration(pragmaSigString, newBody);
   ROSE_ASSERT(pragmaSignature != NULL);
@@ -658,12 +670,21 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
   }
 
 
+  SgType* voidPtrType = buildPointerType(buildVoidType());
+
+  Rose_STL_Container<SgNode*> templateDec = 
+    NodeQuery::querySubTree(newScope, V_SgTemplateVariableDeclaration);
+
+  Rose_STL_Container< SgNode*>::iterator itrT = templateDec.begin();
+  for (; itrT != templateDec.end(); itrT++) {
+    SgTemplateVariableDeclaration* tempVar = isSgTemplateVariableDeclaration(* itrT);
+    std::cout<<" The template declarations are " <<tempVar->unparseToString()<<std::endl; 
+  }
   /**
      Collect all class object declartion to equivalent struct
    **/
   Rose_STL_Container<SgNode*> varDecList =
     NodeQuery::querySubTree(newScope, V_SgVariableDeclaration);
-  SgType* voidPtrType = buildPointerType(buildVoidType());
   ROSE_ASSERT(voidPtrType != NULL);
   Rose_STL_Container<SgNode*>::iterator itr = varDecList.begin();
   for (; itr != varDecList.end(); itr++) {
@@ -710,6 +731,31 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     
 
     std::string originalString  = varDec->unparseToCompleteString();
+    SgTemplateVariableDeclaration* sgvar = isSgTemplateVariableDeclaration(varDec);
+    
+    if(originalString.find("iterator") != std::string::npos) {
+      SgUnparse_Info *info = new SgUnparse_Info();
+      info->set_inEmbeddedDecl();
+      info->set_prefixOperator ();
+      info->unset_SkipBaseType ();
+      info->set_inAggregateInitializer ();
+      info->unset_SkipClassSpecifier ();
+      info->SkipFunctionQualifier ();
+      info->unset_SkipCPPDirectives ();
+      info->set_outputClassTemplateName ();
+      info->set_forceQualifiedNames ();
+      info->set_useTypeAttributes ();
+      info->unset_supressStrippedTypeName ();
+      info->set_cxx11_initialization_list ();
+      
+      originalString.erase(originalString.find("/*"), 2);
+      originalString.erase(originalString.find("*/")-1,  4);
+      //      originalString.erase(originalString.find("/*") + 2);
+      
+      std::cout<<" the declaration "<<originalString <<std::endl;
+      
+      //std::cout<<varDec->get_baseTypeDefiningDeclaration ()->unparseToCompleteString()<<std::endl;
+    }
    
     if(originalString.find("\n", 0) != std::string::npos) {
 
@@ -792,6 +838,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     //  std::cout<<"The original parent statment is"<<parentStatement->unparseToCompleteString()<<std::endl;
     ROSE_ASSERT(parentStatement != NULL);
     std::string originalString  = parentStatement->unparseToCompleteString();
+    // std::cout<<originalString<<std::endl;
     std::string pragmaString = the_pragma_skip + originalString;
     SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
     ROSE_ASSERT(pragmaDec != NULL);
@@ -831,6 +878,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
     SgStatement* parentStatement =  getEnclosingStatement(delCall);
     ROSE_ASSERT(parentStatement != NULL);
     std::string originalString  = parentStatement->unparseToCompleteString();
+    std::cout<<"The main dec "<<originalString<<std::endl;
     std::string pragmaString = the_pragma_skip + originalString;
     SgPragmaDeclaration* pragmaDec = buildPragmaDeclaration(pragmaString, newScope);
     ROSE_ASSERT(pragmaDec != NULL);
