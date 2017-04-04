@@ -557,6 +557,7 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
     buildFunctionCallExp(functionName, callExpr->get_type(), newExprList, 
 			 scopeStmt);
   SgStatement* parentStatement = getEnclosingStatement(callExpr);
+ 
   // TODO currently assumes that the call is made only inside 
   // TODO if for init state that in pragma call and add it above parent.
   SgForStatement* forStatement = isSgForStatement(parentStatement);
@@ -564,7 +565,16 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
   SgForInitStatement* forInit = isSgForInitStatement(parentStatement->get_parent());
   std::string pragmaStr;
   bool set = false;
-  if(forStatement != NULL) {
+  SgExprStatement* exprStmt = isSgExprStatement(parentStatement);
+  if(exprStmt != NULL ) {
+    SgIfStmt* ifStmt = isSgIfStmt(parentStatement->get_scope());
+    if(ifStmt != NULL && ifStmt->get_conditional() == parentStatement) {
+      pragmaStr =  the_pragma_call + "ifcondition " + parentStatement->unparseToString();	   
+      set = true;
+    }
+  }
+
+  if(set == false && forStatement != NULL) {
     SgTreeCopy expCopyHelp;
     
     SgExpression* incExp = forStatement->get_increment();
@@ -575,7 +585,7 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
     expStmt->set_parent(forStatement);
     pragmaStr = the_pragma_call + " increment "   + expStmt->unparseToString();
     set = true;
-  }else if(forInit != NULL && set == false) {
+  } else if(forInit != NULL && set == false) {
     // for init
     //   std::cout<<"Inside for init statement.\n";
     pragmaStr = the_pragma_call + "for_init "+ parentStatement->unparseToString();
@@ -591,8 +601,10 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
 	parentStatement = isSgStatement(parentStatement->get_parent());
       }
     }
-    if(set == false)
+    if(set == false) {
       pragmaStr =  the_pragma_call + "normal " + parentStatement->unparseToString();
+      std::cout<<"The expected pragma string is "<<pragmaStr<<std::endl;
+    }
   }
   ROSE_ASSERT(parentStatement != NULL);
   forStatement = isSgForStatement(parentStatement);
@@ -752,7 +764,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       if(originalString.find("/*") != std::string::npos ) {      
 	  originalString.erase(originalString.find("/*"), 2);
 	  originalString.erase(originalString.find("*/")-1,  4);
-	  std::cout<<" the declaration "<<originalString <<std::endl;
+	  //	  std::cout<<" the declaration "<<originalString <<std::endl;
 	}
       //std::cout<<varDec->get_baseTypeDefiningDeclaration ()->unparseToCompleteString()<<std::endl;
     }
@@ -1032,7 +1044,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    bool skipfunction = skipTheFunction(functionName);
 	    
 	    if(skipfunction) {
-	      std::cout<<" function name to unkewnn"<<functionName<<std::endl;
+	      //  std::cout<<" function name to unkewnn"<<functionName<<std::endl;
 	      replaceFunctionCall(__unknownFunction, callExpr, NULL, false); 
 	    }
 
@@ -1066,7 +1078,7 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	  undefined = skipTheFunction(funName);
 	  bool skip = skipatomicop(funName);
 	  if(skip) {
-	    std::cout<<" function name to unkewnn"<<funName<<std::endl;
+	    //  std::cout<<" function name to unkewnn"<<funName<<std::endl;
 	    replaceFunctionCall(__unknownFunction, callExpr, NULL, false); 
 	    undefined = true;
 	  }
