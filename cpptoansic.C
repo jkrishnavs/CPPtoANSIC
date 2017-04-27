@@ -923,7 +923,8 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
       SgFunctionDeclaration*  fnDec = 
 	callExpr-> getAssociatedFunctionDeclaration();
 
-      
+      if(fnDec == NULL)
+	continue;
       
       SgDeclarationStatement* defDec = fnDec->get_definingDeclaration();
       SgFunctionSymbol* fnSymbol = 
@@ -1000,12 +1001,17 @@ void unparseCPPScopetoCScope(SgBasicBlock *originalScope, SgBasicBlock *newScope
 	    object = arrowExpr->get_lhs_operand();
 	    ROSE_ASSERT(object != NULL);
 	    SgVarRefExp* refExpr = isSgVarRefExp(object);
-	    if(refExpr == NULL){
+	    SgThisExp* thisExp = isSgThisExp(object);
+	    if(refExpr == NULL && thisExp == NULL){
 	      // this means standard library function calls
+	      //xstd::cout<<"The new function skip point 3  "<<fnDec->get_name()<<std::endl;
 	      undefined = true;
-	    } else {
+	    } else if(refExpr != NULL ) {
 	      objectExpr = 
 		isSgExpression(refExpr->copy(expCopyHelp));
+	    } else if(thisExp != NULL) {
+	      objectExpr = 
+		isSgExpression(thisExp->copy(expCopyHelp));
 	    }
 
 	  } else {
