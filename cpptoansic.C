@@ -17,7 +17,11 @@ std::string the_pragma_call   = "replace fnCall ";
 std::string the_pragma_fnSign = "Fnsignature ";
 std::string the_pragma_fnDef  = "skip fnDef "; 
 
-
+/**
+ * TODO Skip classes & Functions with templates.
+ * TODO Skip classes & Functions with operator overloading
+ * TODO Skip classes & Function with address of operators.
+ **/
 
 /**
    This vector will contain the names of 
@@ -75,6 +79,7 @@ std::string functionsTobeSkipped[] =
     "hasMaxValue_seq",
     "getMaxKey_seq",
     "prepare_seq_iteration",
+    "max < int > ",
     "has_next",
     "get_next",
     "ATOMIC_ADD < int32_t > ",
@@ -101,7 +106,7 @@ std::string functionsTobeSkipped[] =
   };
 
 int sizeofClassesTobeSkipped = 16;
-int sizeofFunctionsTobeSkipped = 53;
+int sizeofFunctionsTobeSkipped = 54;
 
 
 bool skipTheFunction(SgName funName);
@@ -1150,10 +1155,15 @@ SgFunctionParameterList* copyFunctionParameterList(SgFunctionParameterList* orig
     SgReferenceType *refType = isSgReferenceType(varType);
     if(refType != NULL) {
       varType = refType->get_base_type();
+      std::cout<<"Found a reference type "<<varType->sage_class_name ()<<std::endl;
     }
-    if(isSgClassType(varType) == NULL) {
+    if(isSgClassType(varType) == NULL && refType == NULL) {
       SgInitializedName* classArg = buildInitializedName( (* origFunArgsIter)->get_name(),
      							  (* origFunArgsIter)->get_type());
+      appendArg(newFunParamsList, classArg);
+    } else if(isSgClassType(varType) == NULL && refType != NULL) {
+      SgInitializedName* classArg = buildInitializedName( (* origFunArgsIter)->get_name(),
+     							  (varType));
       appendArg(newFunParamsList, classArg);
     } else {
       SgInitializedName *classArg = buildInitializedName(GM_GRAPH_NAME
@@ -1229,12 +1239,25 @@ bool skipatomicop(SgName funName) {
 }
 
 bool skipTheFunction(SgName funName) {
+
+
+  std::string functionName = funName.getString();
+
+  if(functionName.find("max") != std::string::npos) {
+    std::cout<<"Found the max function with function Name "<<functionName<<"o \n";
+  }
+
+
   for(int i=0; i < sizeofFunctionsTobeSkipped; i++) {
     if(functionsTobeSkipped[i].compare(funName.getString()) == 0) {
       std::cout<<"The function skipped is "<<funName.getString()<<std::endl;
       return true;
     }
   }
+  
+  if(functionName.find("operator") != std::string::npos) 
+    return true;
+
   return false;
 }
 
