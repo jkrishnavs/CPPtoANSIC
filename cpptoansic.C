@@ -227,6 +227,7 @@ int main ( int argc, char** argv )
 	 <<"\ntypedef int * uintptr_t;\n"
 	 <<"\ntypedef int* seq_iter;\n"
 	 <<"\ntypedef unsigned int uint32_t;\n"
+         <<"\ntypedef unsigned int level_t;\n"
 	 <<"\ntypedef long long int64_t;\n";
 #endif
 
@@ -577,6 +578,18 @@ void replaceFunctionCall(SgName functionName, SgFunctionCallExp* callExpr, SgExp
       pragmaStr =  the_pragma_call + "ifcondition " + parentStatement->unparseToString();	   
       set = true;
     }
+    
+    SgWhileStmt* whileStmt = isSgWhileStmt(parentStatement->get_scope());
+    if(whileStmt != NULL && whileStmt->get_condition() == parentStatement) {
+      pragmaStr =  the_pragma_call + "whilecondition " + parentStatement->unparseToString();	   
+      set = true;
+    }
+
+    SgDoWhileStmt *doWhileStmt = isSgDoWhileStmt(parentStatement->get_scope());
+    if(doWhileStmt != NULL && doWhileStmt->get_condition() == parentStatement) {
+      pragmaStr =  the_pragma_call + "dowhilecondition " + parentStatement->unparseToString();	   
+      set = true;
+    } 
   }
 
   if(set == false && forStatement != NULL) {
